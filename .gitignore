@@ -1,0 +1,42 @@
+﻿# --- Python ---
+__pycache__/
+*.py[cod]
+*.so
+*.pyd
+*.dll
+*.log
+
+# Virtual envs
+.venv/
+.venv*/
+env/
+venv/
+
+# PyInstaller / build outputs
+build/
+dist/
+*.spec
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Audio & heavy data (ponech jen malé ukázky)
+*.wav
+*.mp3
+*.flac
+*.aiff
+*.aif
+*.m4a
+*.ogg
+*.aac
+samples/
+data/
+
+# Modely / váhy / cache
+models/
+checkpoints/
+*.cache/
+.cache/
