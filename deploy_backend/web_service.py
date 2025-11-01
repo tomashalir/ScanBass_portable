@@ -1,17 +1,14 @@
 from __future__ import annotations
 
 """
-ScanBass – WAV-only, lightweight backend (MVP + warmup)
+ScanBass – WAV-only backend (MVP)
+---------------------------------
+- POST /jobs  : přijme .wav nebo .mid
+- GET  /jobs/{id} : vrátí přímo .mid ke stažení
+- název souboru: scanbass_<original_basename>.mid
 
-Hodnotová nabídka:
-- uživatel nahraje AUDIO (.wav) nebo už hotové MIDI
-- backend z audia udělá: wav -> (band-pass -> YIN) -> MIDI -> vybere nejnižší linku
-- pokud nahraje MIDI, jen vybere nejnižší linku
-- frontend může dál používat POST /jobs + GET /jobs/{id}
-
-Omezení:
-- AUDIO: jen .wav (kvůli rychlosti na Render Starter)
-- warmup při startu pro zkrácení cold start latency
+Omezení MVP:
+- audio: jen .wav (kvůli rychlosti na Render Starter)
 """
 
 import io
@@ -27,7 +24,7 @@ import mido
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 # ---------------------------------------------------------
 # Konfigurace
@@ -37,7 +34,7 @@ TARGET_SR = 16000
 BASS_LOW = 40
 BASS_HIGH = 300
 
-app = FastAPI(title="ScanBass – WAV-only MVP (with warmup)")
+app = FastAPI(title="ScanBass – WAV-only MVP")
 
 app.add_middleware(
     CORSMiddleware,
@@ -47,12 +44,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# jednoduché in-memory "úložiště" jobů
+# in-memory "databáze" jobů
+# JOBS[job_id] = {
+#   "status": "done" | "processing" | "error",
+#   "result": bytes | None,
+#   "error": str | None,
+#   "original_name": str | None
+# }
 JOBS: Dict[str, Dict[str, Any]] = {}
 
 
 # ---------------------------------------------------------
-# Healthchecky pro Render
+# Healthcheck pro Render
 # ---------------------------------------------------------
 @app.get("/")
 async def root():
@@ -121,19 +124,19 @@ def frames_to_events(
 
 
 def audio_wav_to_bass_midi(y: np.ndarray, sr: int) -> pretty_midi.PrettyMIDI:
-    # oříznout délku
+    # oříznout
     max_samples = int(MAX_SECONDS * sr)
     y = y[:max_samples]
 
-    # resample (kvůli rychlosti)
+    # resample
     if sr != TARGET_SR:
         y = librosa.resample(y, orig_sr=sr, target_sr=TARGET_SR)
         sr = TARGET_SR
 
-    # band-pass na basy
+    # band-pass
     y_bp = bandpass(y, sr)
 
-    # pitch přes YIN
+    # pitch
     hop_length = 512
     pitches = librosa.yin(
         y_bp,
@@ -144,14 +147,14 @@ def audio_wav_to_bass_midi(y: np.ndarray, sr: int) -> pretty_midi.PrettyMIDI:
         hop_length=hop_length,
     )
 
-    # confidence z RMS
+    # confidence
     S = np.abs(librosa.stft(y_bp, n_fft=2048, hop_length=hop_length))
     rms = librosa.feature.rms(S=S)[0]
     conf = (rms - rms.min()) / (rms.max() - rms.min() + 1e-9)
 
     events = frames_to_events(pitches, conf, hop_length, sr)
 
-    # poskládat MIDI
+    # MIDI
     pm = pretty_midi.PrettyMIDI()
     instr = pretty_midi.Instrument(program=33)  # Acoustic Bass
     for start, end, midi_note in events:
@@ -207,7 +210,7 @@ def midi_to_note_intervals(mid: mido.MidiFile) -> List[Dict]:
                         }
                     )
 
-    # ukončit otevřené noty
+    # uzavřít otevřené
     if active:
         max_time = 0
         for track in mid.tracks:
@@ -241,12 +244,10 @@ def pick_lowest_line(notes: List[Dict]) -> List[Dict]:
     i = 0
 
     for t in change_points:
-        # nové noty
         while i < len(notes) and notes[i]["start"] == t:
             active.append(notes[i])
             i += 1
 
-        # ukončené noty vyhodíme
         active = [n for n in active if n["end"] != t]
 
         if active:
@@ -304,18 +305,17 @@ def notes_to_midi(bass_notes: List[Dict], ticks_per_beat: int) -> mido.MidiFile:
 
 
 # ---------------------------------------------------------
-# Warmup při startu – inicializace librosy
+# Warmup (aby první request nebyl 30 s)
 # ---------------------------------------------------------
 @app.on_event("startup")
 async def warmup():
     try:
         sr = TARGET_SR
-        # vygenerujeme 1 sekundu ticha a "proženeme" pipeline
         y = np.zeros(sr, dtype=np.float32)
         _ = audio_wav_to_bass_midi(y, sr)
-        print("Warmup completed – librosa initialized.")
+        print("✅ warmup done")
     except Exception as e:
-        print("Warmup failed:", e)
+        print("❌ warmup failed:", e)
 
 
 # ---------------------------------------------------------
@@ -324,10 +324,12 @@ async def warmup():
 @app.post("/jobs")
 async def create_job(file: UploadFile = File(...)):
     filename = (file.filename or "").lower()
+    original_name = file.filename or "input"
+
     data = await file.read()
 
     job_id = str(uuid.uuid4())
-    JOBS[job_id] = {"status": "processing", "result": None, "error": None}
+    JOBS[job_id] = {"status": "processing", "result": None, "error": None, "original_name": original_name}
 
     try:
         if filename.endswith((".mid", ".midi")):
@@ -337,7 +339,7 @@ async def create_job(file: UploadFile = File(...)):
                 raise ValueError("Only .wav is supported in this MVP version.")
             y, sr = sf.read(io.BytesIO(data))
             if y.ndim > 1:
-                y = y.mean(axis=1)  # stereo -> mono
+                y = y.mean(axis=1)
             pm = audio_wav_to_bass_midi(y, sr)
             buf = io.BytesIO()
             pm.write(buf)
@@ -360,13 +362,23 @@ async def get_job(job_id: str):
         raise HTTPException(status_code=404, detail="Job not found")
 
     if job["status"] == "processing":
+        # frontend polluje -> dáme mu JSON
         return {"job_id": job_id, "status": "processing"}
 
     if job["status"] == "error":
         return {"job_id": job_id, "status": "error", "error": job["error"]}
 
-    return StreamingResponse(
-        io.BytesIO(job["result"]),
+    # hotovo -> vracíme přímo soubor
+    result_bytes: bytes = job["result"]
+    original_name: str = job.get("original_name") or "output"
+    # sundat příponu
+    if "." in original_name:
+        original_name = original_name.rsplit(".", 1)[0]
+
+    filename = f"scanbass_{original_name}.mid"
+
+    return FileResponse(
+        path_or_file=io.BytesIO(result_bytes),
         media_type="audio/midi",
-        headers={"Content-Disposition": 'attachment; filename="scanbass.mid"'},
+        filename=filename,
     )
