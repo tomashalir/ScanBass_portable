@@ -1,0 +1,84 @@
+ (cd "$(git rev-parse --show-toplevel)" && git apply --3way <<'EOF' 
+diff --git a/deploy_backend/src/web_service.py b/deploy_backend/src/web_service.py
+index daee9ccec49ae5288ca7727a49fc17b97a26906e..370e53338ff79227ddc583459f673715b69cf209 100644
+--- a/deploy_backend/src/web_service.py
++++ b/deploy_backend/src/web_service.py
+@@ -1,41 +1,45 @@
+ """FastAPI wrapper exposing ScanBass modes as an HTTP service."""
+ 
+ from __future__ import annotations
+ 
+ import sys
+ from pathlib import Path
+ 
+ # --- přidáme cestu k projektu (src) pro importy ---
+ ROOT = Path(__file__).resolve().parent
+ if str(ROOT) not in sys.path:
+     sys.path.insert(0, str(ROOT))
+ # ---------------------------------------------------
+ 
+ import asyncio
+ import logging
+ import os
++
++PORT_ENV = os.getenv("PORT")
++if PORT_ENV and "SCANBASS_PORT" not in os.environ:
++    os.environ["SCANBASS_PORT"] = PORT_ENV
+ import shutil
+ import tempfile
+ import uuid
+ from dataclasses import dataclass, field, asdict as dataclass_asdict
+ from typing import Dict, Literal, Optional
+ 
+ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+ from fastapi.middleware.cors import CORSMiddleware
+ from fastapi.responses import FileResponse
+ from starlette.background import BackgroundTask
+ 
+ from modes.bass_mode import run_bass_mode
+ from modes.poly_mode import run_poly_mode
+ 
+ logger = logging.getLogger(__name__)
+ 
+ DEFAULT_OUTPUT_ROOT = Path(os.getenv("SCANBASS_OUTPUT_ROOT", "outputs")).resolve()
+ DEFAULT_OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+ 
+ @dataclass
+ class JobState:
+     """Track ScanBass processing jobs for asynchronous clients."""
+ 
+     job_id: str
+     mode: Literal["bass", "poly"]
+@@ -202,27 +206,27 @@ async def list_jobs():
+ async def job_status(job_id: str):
+     job = await _get_job(job_id)
+     return job.to_dict()
+ 
+ @app.get("/jobs/{job_id}/download")
+ async def download_results(job_id: str):
+     job = await _get_job(job_id)
+     if job.status != "succeeded" or not job.output_dir:
+         raise HTTPException(status_code=409, detail="Job not finished yet")
+ 
+     base_dir = Path(job.output_dir)
+     if not base_dir.exists():
+         raise HTTPException(status_code=404, detail="Job output missing")
+ 
+     temp_dir = Path(tempfile.mkdtemp(prefix="scanbass_zip_"))
+     base_name = temp_dir / job_id
+     archive_path = shutil.make_archive(str(base_name), "zip", root_dir=base_dir)
+ 
+     background = BackgroundTask(lambda: shutil.rmtree(temp_dir, ignore_errors=True))
+     return FileResponse(archive_path, filename=f"{job_id}.zip", background=background)
+ 
+ if __name__ == "__main__":
+     import uvicorn
+ 
+     host = os.getenv("SCANBASS_HOST", "0.0.0.0")
+-    port = int(os.getenv("SCANBASS_PORT", "8000"))
+-    uvicorn.run("src.web_service:app", host=host, port=port, reload=False)
++    port = int(os.getenv("SCANBASS_PORT") or os.getenv("PORT") or "8000")
++    uvicorn.run(app, host=host, port=port, reload=False)
+ 
+EOF
+)
