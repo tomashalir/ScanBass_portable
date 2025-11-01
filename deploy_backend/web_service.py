@@ -35,6 +35,9 @@ if str(SRC_DIR) not in sys.path:
 
 logger = logging.getLogger(__name__)
 
+# maximum amount of audio (in seconds) that the backend will process per job
+MAX_UPLOAD_DURATION_SECONDS = 30.0
+
 # Render gives us PORT; locally we can leave 8000.
 PORT_ENV = os.getenv("PORT")
 if PORT_ENV and "SCANBASS_PORT" not in os.environ:
@@ -98,7 +101,70 @@ def _save_upload(upload: UploadFile) -> Path:
     with temp_path.open("wb") as f:
         shutil.copyfileobj(upload.file, f)
     upload.file.close()
-    return temp_path
+    return _enforce_max_duration(temp_path, MAX_UPLOAD_DURATION_SECONDS)
+
+
+def _enforce_max_duration(audio_path: Path, max_seconds: float) -> Path:
+    """Trim an uploaded audio file to the first ``max_seconds`` seconds.
+
+    If trimming is necessary and the original container format is not easily
+    writable by :mod:`soundfile`, the data is re-encoded as WAV.  The path to
+    the (potentially new) trimmed file is returned.
+    """
+
+    try:
+        import soundfile as sf  # type: ignore
+    except Exception as exc:  # pragma: no cover - import failure is unexpected
+        raise HTTPException(status_code=500, detail="Audio backend unavailable") from exc
+
+    try:
+        with sf.SoundFile(str(audio_path)) as sound_file:
+            samplerate = sound_file.samplerate
+            total_frames = len(sound_file)
+            if total_frames == 0:
+                raise HTTPException(status_code=400, detail="Uploaded audio is empty")
+
+            max_frames = int(max_seconds * samplerate)
+            needs_trim = total_frames > max_frames
+            frames_to_read = min(total_frames, max_frames)
+
+            sound_file.seek(0)
+            data = sound_file.read(frames=frames_to_read)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Could not read uploaded audio") from exc
+
+    if not needs_trim:
+        return audio_path
+
+    # ``soundfile`` can reliably write a subset of formats.  Falling back to
+    # WAV keeps the pipeline predictable when trimming is needed.
+    safe_suffixes = {".wav", ".flac", ".ogg", ".oga", ".aiff", ".aif", ".aifc"}
+    suffix = audio_path.suffix.lower()
+    target_path = audio_path
+    if suffix not in safe_suffixes:
+        target_path = audio_path.with_suffix(".wav")
+
+    try:
+        sf.write(str(target_path), data, samplerate)
+    except Exception as exc:  # pragma: no cover - disk write failure
+        raise HTTPException(status_code=500, detail="Failed to store trimmed audio") from exc
+
+    if target_path != audio_path:
+        try:
+            audio_path.unlink()
+        except OSError:
+            pass
+
+    actual_duration = frames_to_read / float(samplerate)
+    logger.info(
+        "Trimmed uploaded audio to %.2f seconds (original: %.2f seconds)",
+        actual_duration,
+        total_frames / float(samplerate),
+    )
+
+    return target_path
 
 
 def _make_job_id(input_name: str, mode: str) -> str:
