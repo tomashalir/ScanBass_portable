@@ -1,5 +1,7 @@
 # Poly mode: Basic Pitch -> lowest voice -> MIDI
 from pathlib import Path
+from typing import Optional
+
 import numpy as np
 import pretty_midi
 from basic_pitch.inference import predict_and_save
@@ -72,7 +74,18 @@ def _lowest_voice_to_mono(notes, frame_hz: int = 40, min_note_len_ms: int = 90, 
     return pm_out
 
 
-def run_poly_mode(audio_path: str, out_dir: str, frame_hz: int = 40, min_note_len_ms: int = 90, gap_merge_ms: int = 60):
+def run_poly_mode(
+    audio_path: str,
+    out_dir: str,
+    frame_hz: int = 40,
+    min_note_len_ms: int = 90,
+    gap_merge_ms: int = 60,
+    onset_threshold: float = 0.5,
+    frame_threshold: float = 0.3,
+    basic_pitch_min_note_len_ms: float = 127.7,
+    minimum_frequency: Optional[float] = None,
+    maximum_frequency: Optional[float] = None,
+):
     """
     1) Transcribe POLY MIDI from audio (Basic Pitch 0.4.0).
     2) Extract the lowest voice and save as bassline.mid
@@ -80,6 +93,29 @@ def run_poly_mode(audio_path: str, out_dir: str, frame_hz: int = 40, min_note_le
     audio = Path(audio_path).resolve()
     out = Path(out_dir).resolve()
     out.mkdir(parents=True, exist_ok=True)
+
+    if frame_hz <= 0:
+        raise ValueError("frame_hz must be positive")
+    if min_note_len_ms <= 0:
+        raise ValueError("min_note_len_ms must be positive")
+    if gap_merge_ms < 0:
+        raise ValueError("gap_merge_ms must be non-negative")
+    if not 0.0 <= onset_threshold <= 1.0:
+        raise ValueError("onset_threshold must be between 0 and 1")
+    if not 0.0 <= frame_threshold <= 1.0:
+        raise ValueError("frame_threshold must be between 0 and 1")
+    if basic_pitch_min_note_len_ms <= 0:
+        raise ValueError("basic_pitch_min_note_len_ms must be positive")
+    if minimum_frequency is not None and minimum_frequency <= 0:
+        raise ValueError("minimum_frequency must be positive")
+    if maximum_frequency is not None and maximum_frequency <= 0:
+        raise ValueError("maximum_frequency must be positive")
+    if (
+        minimum_frequency is not None
+        and maximum_frequency is not None
+        and minimum_frequency >= maximum_frequency
+    ):
+        raise ValueError("minimum_frequency must be less than maximum_frequency")
 
     # Basic Pitch 0.4.0: positionální volání
     # predict_and_save(inputs, output_directory, save_midi, sonify_midi,
@@ -91,7 +127,12 @@ def run_poly_mode(audio_path: str, out_dir: str, frame_hz: int = 40, min_note_le
         False,   # sonify_midi
         False,   # save_model_outputs
         False,   # save_notes
-        ICASSP_2022_MODEL_PATH  # vestavěná cesta k TF modelu
+        ICASSP_2022_MODEL_PATH,  # vestavěná cesta k TF modelu
+        onset_threshold=onset_threshold,
+        frame_threshold=frame_threshold,
+        minimum_note_length=basic_pitch_min_note_len_ms,
+        minimum_frequency=minimum_frequency,
+        maximum_frequency=maximum_frequency,
     )
 
     # Najdi vyrobené poly MIDI

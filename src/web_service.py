@@ -93,6 +93,13 @@ def _job_output_dir(job_id: str) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     return out_dir
 
+
+def _optional_float(value: Optional[object]) -> Optional[float]:
+    if value is None or value == "":
+        return None
+    return float(value)
+
+
 async def _run_mode(mode: str, audio_path: Path, out_dir: Path, **params):
     if mode == "bass":
         return await asyncio.to_thread(
@@ -104,6 +111,8 @@ async def _run_mode(mode: str, audio_path: Path, out_dir: Path, **params):
             overlap=float(params.get("segment_overlap", 0.1)),
         )
     if mode == "poly":
+        min_freq = _optional_float(params.get("bp_min_frequency"))
+        max_freq = _optional_float(params.get("bp_max_frequency"))
         return await asyncio.to_thread(
             run_poly_mode,
             str(audio_path),
@@ -111,6 +120,11 @@ async def _run_mode(mode: str, audio_path: Path, out_dir: Path, **params):
             frame_hz=int(params.get("frame_hz", 40)),
             min_note_len_ms=int(params.get("min_note_len_ms", 90)),
             gap_merge_ms=int(params.get("gap_merge_ms", 60)),
+            onset_threshold=float(params.get("bp_onset_threshold", 0.5)),
+            frame_threshold=float(params.get("bp_frame_threshold", 0.3)),
+            basic_pitch_min_note_len_ms=float(params.get("bp_min_note_ms", 127.7)),
+            minimum_frequency=min_freq,
+            maximum_frequency=max_freq,
         )
     raise ValueError(f"Unsupported mode: {mode}")
 
@@ -131,6 +145,11 @@ async def _execute_job(
     frame_hz: int,
     min_note_len_ms: int,
     gap_merge_ms: int,
+    bp_onset_threshold: float,
+    bp_frame_threshold: float,
+    bp_min_note_ms: float,
+    bp_min_frequency: Optional[float],
+    bp_max_frequency: Optional[float],
 ):
     async with JOB_LOCK:
         job.status = "running"
@@ -143,6 +162,11 @@ async def _execute_job(
         frame_hz=frame_hz,
         min_note_len_ms=min_note_len_ms,
         gap_merge_ms=gap_merge_ms,
+        bp_onset_threshold=bp_onset_threshold,
+        bp_frame_threshold=bp_frame_threshold,
+        bp_min_note_ms=bp_min_note_ms,
+        bp_min_frequency=bp_min_frequency,
+        bp_max_frequency=bp_max_frequency,
     )
 
     try:
@@ -180,6 +204,11 @@ async def submit_job(
     frame_hz: int = Form(40, description="Poly mode frame rate"),
     min_note_len_ms: int = Form(90, description="Poly mode minimum note length"),
     gap_merge_ms: int = Form(60, description="Poly mode gap merge threshold"),
+    bp_onset_threshold: float = Form(0.5, description="Poly mode Basic Pitch onset threshold"),
+    bp_frame_threshold: float = Form(0.3, description="Poly mode Basic Pitch frame threshold"),
+    bp_min_note_ms: float = Form(127.7, description="Poly mode Basic Pitch minimum note length (ms)"),
+    bp_min_frequency: Optional[float] = Form(None, description="Poly mode Basic Pitch minimum frequency (Hz)"),
+    bp_max_frequency: Optional[float] = Form(None, description="Poly mode Basic Pitch maximum frequency (Hz)"),
 ):
     mode_normalized = mode.lower().strip()
     if mode_normalized not in {"bass", "poly"}:
@@ -202,6 +231,11 @@ async def submit_job(
             frame_hz=frame_hz,
             min_note_len_ms=min_note_len_ms,
             gap_merge_ms=gap_merge_ms,
+            bp_onset_threshold=bp_onset_threshold,
+            bp_frame_threshold=bp_frame_threshold,
+            bp_min_note_ms=bp_min_note_ms,
+            bp_min_frequency=bp_min_frequency,
+            bp_max_frequency=bp_max_frequency,
         )
     )
 
