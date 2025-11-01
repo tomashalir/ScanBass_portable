@@ -128,7 +128,8 @@ class HeavyBassTranscriber(BaseBassTranscriber):
 
     def _ensure_crepe(self) -> None:
         if not self._crepe_loaded:
-            self.torchcrepe.load.model("full", device=self.device)
+            device_str = str(self.device)
+            self.torchcrepe.load.model("full", device=device_str)
             self._crepe_loaded = True
 
     # Processing --------------------------------------------------------
@@ -177,7 +178,7 @@ class HeavyBassTranscriber(BaseBassTranscriber):
         self._ensure_crepe()
         with torch.inference_mode():
             f0, periodicity = self.torchcrepe.predict(
-                bass_mono.to(self.device),
+                bass_mono,
                 sr,
                 hop_length,
                 fmin=self.fmin,
@@ -185,7 +186,7 @@ class HeavyBassTranscriber(BaseBassTranscriber):
                 model="full",
                 batch_size=128,
                 return_periodicity=True,
-                device=self.device,
+                device=str(self.device),
             )
 
         pitches = f0[0].cpu().numpy()
@@ -451,12 +452,21 @@ def prepare_audio(data: bytes, filename: str) -> Tuple[np.ndarray, int]:
 
 @app.on_event("startup")
 async def warmup() -> None:
+    pipeline = get_pipeline()
     try:
-        pipeline = get_pipeline()
         pipeline.warmup()
         print(f"✅ warmup done ({pipeline.name} mode)")
     except Exception as exc:
         print(f"❌ warmup failed: {exc}")
+        if isinstance(pipeline, HeavyBassTranscriber):
+            print("⚠️  Falling back to light pipeline after warmup failure")
+            global PIPELINE
+            PIPELINE = LightBassTranscriber()
+            try:
+                PIPELINE.warmup()
+                print("✅ warmup done (light mode)")
+            except Exception as light_exc:
+                print(f"❌ fallback warmup failed: {light_exc}")
 
 
 @app.post("/jobs")
