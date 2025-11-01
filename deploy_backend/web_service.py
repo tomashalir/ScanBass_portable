@@ -1,39 +1,42 @@
 from __future__ import annotations
 
 """
-ScanBass – lightweight MVP backend
+ScanBass – WAV-only, lightweight backend (MVP)
 
 Hodnotová nabídka:
-MP3/WAV -> (lehké DSP / YIN) -> MIDI -> vyber nejnižší linku -> stáhni jako .mid
+- uživatel nahraje AUDIO (.wav) NEBO už hotové MIDI
+- backend z audia udělá: wav -> (band-pass -> YIN) -> MIDI -> vybere nejnižší linku
+- pokud nahraje MIDI, jen vybere nejnižší linku
+- frontend může dál používat POST /jobs + GET /jobs/{id}
 
-Kompatibilní s frontendem, který volá:
-- POST /jobs
-- GET /jobs/{job_id}
+Omezení:
+- AUDIO: jen .wav (kvůli rychlosti na Render Starter)
 """
 
 import io
 import uuid
 from typing import Dict, Any, List, Tuple
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, JSONResponse
-
 import numpy as np
+import soundfile as sf
 import librosa
 from scipy.signal import butter, sosfilt
 import pretty_midi
 import mido
 
-# ---------------------------------------------------------------------------
+from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse, JSONResponse
+
+# ---------------------------------------------------------
 # Konfigurace
-# ---------------------------------------------------------------------------
-MAX_SECONDS = 30.0     # ořízneme, aby se to vešlo do paměti
-TARGET_SR = 16000      # nižší samplerate = rychlejší
+# ---------------------------------------------------------
+MAX_SECONDS = 30.0
+TARGET_SR = 16000
 BASS_LOW = 40
 BASS_HIGH = 300
 
-app = FastAPI(title="ScanBass – audio-to-bass MIDI (light)")
+app = FastAPI(title="ScanBass – WAV-only MVP")
 
 app.add_middleware(
     CORSMiddleware,
@@ -43,68 +46,29 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# jednoduché in-memory "úložiště" jobů
+JOBS: Dict[str, Dict[str, Any]] = {}
+
+
+# ---------------------------------------------------------
+# Healthchecky pro Render
+# ---------------------------------------------------------
 @app.get("/")
 async def root():
-    return {"ok": True, "message": "scanbass online"}
+    return {"ok": True, "message": "scanbass wav-only online", "jobs": len(JOBS)}
+
 
 @app.head("/")
 async def root_head():
     return JSONResponse(content={"ok": True})
 
-# in-memory "databáze"
-JOBS: Dict[str, Dict[str, Any]] = {}
 
-
-# ---------------------------------------------------------------------------
-# Audio -> Bass MIDI
-# ---------------------------------------------------------------------------
-
+# ---------------------------------------------------------
+# DSP / audio -> MIDI (basa)
+# ---------------------------------------------------------
 def bandpass(y: np.ndarray, sr: int, low: int = BASS_LOW, high: int = BASS_HIGH, order: int = 4) -> np.ndarray:
-    from scipy.signal import butter, sosfilt
     sos = butter(order, [low, high], btype="band", fs=sr, output="sos")
     return sosfilt(sos, y)
-
-
-def audio_to_midi_bass(y: np.ndarray, sr: int) -> pretty_midi.PrettyMIDI:
-    """
-    Lehká transkripce: band-pass -> YIN -> frame->notes -> MIDI (jen basová linka)
-    """
-    # 1) band-pass
-    y_bp = bandpass(y, sr)
-
-    # 2) pitch pomocí librosa.yin
-    hop_length = 512
-    pitches = librosa.yin(
-        y_bp,
-        fmin=librosa.note_to_hz("C1"),
-        fmax=librosa.note_to_hz("C5"),
-        sr=sr,
-        frame_length=2048,
-        hop_length=hop_length,
-    )
-
-    # 3) confidence z RMS
-    S = np.abs(librosa.stft(y_bp, n_fft=2048, hop_length=hop_length))
-    rms = librosa.feature.rms(S=S)[0]
-    conf = (rms - rms.min()) / (rms.max() - rms.min() + 1e-9)
-
-    # 4) frames -> noty (už jen 1 linka)
-    events = frames_to_events(pitches, conf, hop_length, sr)
-
-    # 5) MIDI
-    pm = pretty_midi.PrettyMIDI()
-    instr = pretty_midi.Instrument(program=33)  # Acoustic Bass
-    for start, end, midi_note in events:
-        instr.notes.append(
-            pretty_midi.Note(
-                velocity=100,
-                pitch=int(midi_note),
-                start=float(start),
-                end=float(max(end, start + 0.05)),
-            )
-        )
-    pm.instruments.append(instr)
-    return pm
 
 
 def frames_to_events(
@@ -130,7 +94,6 @@ def frames_to_events(
                 cur_start = t
                 cur_midi = midi
             else:
-                # pokud se výška moc liší, ukončíme a začneme novou
                 if abs(cur_midi - midi) > 1:
                     events.append((cur_start, t, cur_midi))
                     cur_start = t
@@ -156,10 +119,56 @@ def frames_to_events(
     return merged
 
 
-# ---------------------------------------------------------------------------
-# MIDI -> nejnižší linka (když uživatel pošle rovnou MIDI)
-# ---------------------------------------------------------------------------
+def audio_wav_to_bass_midi(y: np.ndarray, sr: int) -> pretty_midi.PrettyMIDI:
+    # oříznout délku
+    max_samples = int(MAX_SECONDS * sr)
+    y = y[:max_samples]
 
+    # resample (kvůli rychlosti)
+    if sr != TARGET_SR:
+        y = librosa.resample(y, orig_sr=sr, target_sr=TARGET_SR)
+        sr = TARGET_SR
+
+    # band-pass na basy
+    y_bp = bandpass(y, sr)
+
+    # pitch přes YIN
+    hop_length = 512
+    pitches = librosa.yin(
+        y_bp,
+        fmin=librosa.note_to_hz("C1"),
+        fmax=librosa.note_to_hz("C5"),
+        sr=sr,
+        frame_length=2048,
+        hop_length=hop_length,
+    )
+
+    # confidence z RMS
+    S = np.abs(librosa.stft(y_bp, n_fft=2048, hop_length=hop_length))
+    rms = librosa.feature.rms(S=S)[0]
+    conf = (rms - rms.min()) / (rms.max() - rms.min() + 1e-9)
+
+    events = frames_to_events(pitches, conf, hop_length, sr)
+
+    # poskládat MIDI
+    pm = pretty_midi.PrettyMIDI()
+    instr = pretty_midi.Instrument(program=33)  # Acoustic Bass
+    for start, end, midi_note in events:
+        instr.notes.append(
+            pretty_midi.Note(
+                velocity=100,
+                pitch=int(midi_note),
+                start=float(start),
+                end=float(max(end, start + 0.05)),
+            )
+        )
+    pm.instruments.append(instr)
+    return pm
+
+
+# ---------------------------------------------------------
+# MIDI -> jen nejnižší linka
+# ---------------------------------------------------------
 def midi_bytes_to_bassline(midi_bytes: bytes) -> bytes:
     mid = mido.MidiFile(file=io.BytesIO(midi_bytes))
     notes = midi_to_note_intervals(mid)
@@ -223,6 +232,7 @@ def midi_to_note_intervals(mid: mido.MidiFile) -> List[Dict]:
 def pick_lowest_line(notes: List[Dict]) -> List[Dict]:
     if not notes:
         return []
+
     change_points = sorted({n["start"] for n in notes} | {n["end"] for n in notes})
     active: List[Dict] = []
     bass_notes: List[Dict] = []
@@ -230,10 +240,12 @@ def pick_lowest_line(notes: List[Dict]) -> List[Dict]:
     i = 0
 
     for t in change_points:
+        # nové noty
         while i < len(notes) and notes[i]["start"] == t:
             active.append(notes[i])
             i += 1
 
+        # ukončené noty vyhodíme
         active = [n for n in active if n["end"] != t]
 
         if active:
@@ -290,20 +302,14 @@ def notes_to_midi(bass_notes: List[Dict], ticks_per_beat: int) -> mido.MidiFile:
     return mid_out
 
 
-# ---------------------------------------------------------------------------
-# API
-# ---------------------------------------------------------------------------
-
-@app.get("/")
-async def root():
-    return {"ok": True, "message": "ScanBass audio->bass MIDI backend is running", "jobs": len(JOBS)}
-
-
+# ---------------------------------------------------------
+# API – kompatibilní s tvým frontendem
+# ---------------------------------------------------------
 @app.post("/jobs")
 async def create_job(file: UploadFile = File(...)):
     """
-    Přijme buď audio (mp3, wav, ogg, m4a...), nebo MIDI.
-    Vrátí job_id, výsledek uloží v paměti.
+    - když přijde .mid/.midi -> jen vybereme basu
+    - když přijde cokoliv jiného -> bereme to jako .wav (MVP omezení)
     """
     filename = (file.filename or "").lower()
     data = await file.read()
@@ -313,21 +319,17 @@ async def create_job(file: UploadFile = File(...)):
 
     try:
         if filename.endswith((".mid", ".midi")):
-            # už je to MIDI -> jen vyzobnout basu
+            # už je to MIDI -> nejnižší linka
             result_bytes = midi_bytes_to_bassline(data)
         else:
-            # bereme to jako audio -> audio->MIDI->basa
-            # načíst audio
-            y, sr = librosa.load(io.BytesIO(data), sr=None, mono=True)
-            # oříznout
-            max_samples = int(MAX_SECONDS * sr)
-            y = y[:max_samples]
-            # resample
-            if sr != TARGET_SR:
-                y = librosa.resample(y, orig_sr=sr, target_sr=TARGET_SR)
-                sr = TARGET_SR
-            pm = audio_to_midi_bass(y, sr)
-            # serialize to bytes
+            # WAV-only větev
+            if not filename.endswith(".wav"):
+                raise ValueError("Only .wav is supported in this MVP version.")
+            # načtení WAV
+            y, sr = sf.read(io.BytesIO(data))
+            if y.ndim > 1:
+                y = y.mean(axis=1)  # stereo -> mono
+            pm = audio_wav_to_bass_midi(y, sr)
             buf = io.BytesIO()
             pm.write(buf)
             result_bytes = buf.getvalue()
@@ -354,7 +356,6 @@ async def get_job(job_id: str):
     if job["status"] == "error":
         return {"job_id": job_id, "status": "error", "error": job["error"]}
 
-    # status == done -> vrátíme MIDI
     return StreamingResponse(
         io.BytesIO(job["result"]),
         media_type="audio/midi",
