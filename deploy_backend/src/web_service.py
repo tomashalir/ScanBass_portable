@@ -14,6 +14,10 @@ if str(ROOT) not in sys.path:
 import asyncio
 import logging
 import os
+
+PORT_ENV = os.getenv("PORT")
+if PORT_ENV and "SCANBASS_PORT" not in os.environ:
+    os.environ["SCANBASS_PORT"] = PORT_ENV
 import shutil
 import tempfile
 import uuid
@@ -224,5 +228,5 @@ if __name__ == "__main__":
     import uvicorn
 
     host = os.getenv("SCANBASS_HOST", "0.0.0.0")
-    port = int(os.getenv("SCANBASS_PORT", "8000"))
-    uvicorn.run("src.web_service:app", host=host, port=port, reload=False)
+    port = int(os.getenv("SCANBASS_PORT") or os.getenv("PORT") or "8000")
+    uvicorn.run(app, host=host, port=port, reload=False)
