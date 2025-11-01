@@ -16,6 +16,8 @@ def main():
     p.add_argument("--gap-merge", type=int, default=60, help="Poly: merge micro-gaps of same pitch in ms (default 60)")
     # bass controls
     p.add_argument("--voicing-threshold", type=float, default=0.5, help="Bass: torchcrepe voicing threshold (default 0.5)")
+    p.add_argument("--segment-seconds", type=float, default=15.0, help="Bass: Demucs segment length in seconds (default 15.0)")
+    p.add_argument("--segment-overlap", type=float, default=0.1, help="Bass: Demucs segment overlap ratio (default 0.1)")
     args = p.parse_args()
 
     in_path = Path(args.input).resolve()
@@ -44,7 +46,9 @@ def main():
         result = run_bass_mode(
             audio_path=str(in_path),
             out_dir=str(out_dir),
-            voicing_threshold=args.voicing_threshold
+            voicing_threshold=args.voicing_threshold,
+            segment_seconds=args.segment_seconds,
+            overlap=args.segment_overlap
         )
 
     with open(out_dir / "log.json", "w", encoding="utf-8") as f:

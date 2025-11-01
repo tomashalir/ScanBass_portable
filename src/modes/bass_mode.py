@@ -85,16 +85,29 @@ def _to_midi_from_basswav(bass_wav_path: str, out_dir: str,
     pm.write(str(out_path))
     return str(out_path)
 
-def run_bass_mode(audio_path: str, out_dir: str, voicing_threshold: float = 0.5):
+def run_bass_mode(
+    audio_path: str,
+    out_dir: str,
+    voicing_threshold: float = 0.5,
+    segment_seconds: float = 15.0,
+    overlap: float = 0.1,
+):
     in_path = Path(audio_path).resolve()
     out = Path(out_dir).resolve()
     out.mkdir(parents=True, exist_ok=True)
+
+    if segment_seconds <= 0:
+        raise ValueError("segment_seconds must be positive")
+    if not 0 <= overlap < 1:
+        raise ValueError("overlap must be in [0, 1)")
 
     # 1) Demucs isolate (use mdx_extra to avoid diffq on Win)
     cmd = [
         sys.executable, "-m", "demucs",
         "--two-stems=bass",
         "-n", "mdx_extra",
+        "--segment", str(segment_seconds),
+        "--overlap", str(overlap),
         "-o", str(out),
         str(in_path)
     ]
