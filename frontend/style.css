@@ -1,0 +1,196 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+:root {
+  --bg: radial-gradient(circle at 10% 20%, #0b1f2f 0%, #080810 45%, #020203 80%);
+  --panel: rgba(8, 10, 14, 0.5);
+  --border: rgba(255,255,255,0.05);
+  --accent: linear-gradient(120deg, #00d1ff 0%, #8b5dff 100%);
+  --text: #ecf4ff;
+  --muted: #8e98aa;
+  --note: #00d1ff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  background-attachment: fixed;
+  font-family: 'Inter', sans-serif;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: var(--text);
+  position: relative;
+}
+
+.bg-glow {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle, rgba(0,209,255,0.25) 0%, rgba(0,0,0,0) 50%);
+  filter: blur(120px);
+  pointer-events: none;
+}
+
+.app {
+  width: 520px;
+  background: rgba(7, 8, 12, 0.6);
+  border: 1px solid rgba(255,255,255,0.02);
+  backdrop-filter: blur(30px);
+  border-radius: 24px;
+  padding: 2.5rem 2.5rem 2.8rem;
+  box-shadow: 0 20px 70px rgba(0,0,0,0.45);
+}
+
+header h1 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0 0 .25rem 0;
+}
+.subtitle {
+  margin: 0 0 1.5rem 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+#dropzone {
+  border: 1.5px dashed rgba(255,255,255,0.2);
+  border-radius: 18px;
+  padding: 1.5rem 1.2rem;
+  background: rgba(255,255,255,0.015);
+  text-align: center;
+  transition: all .25s ease;
+  cursor: pointer;
+}
+#dropzone:hover,
+#dropzone.active {
+  border-color: rgba(0,209,255,1);
+  box-shadow: 0 0 25px rgba(0,209,255,0.3);
+  background: radial-gradient(circle, rgba(0,209,255,0.05) 0%, rgba(255,255,255,0) 60%);
+}
+#dropLabel {
+  font-weight: 500;
+}
+#dropzone small {
+  display: block;
+  margin-top: .45rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.mode {
+  display: flex;
+  gap: 1rem;
+  margin: 1.4rem 0 1.6rem;
+}
+.mode label {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.01);
+  border-radius: 14px;
+  padding: 0.45rem 0.9rem;
+  display: flex;
+  gap: .4rem;
+  align-items: center;
+  cursor: pointer;
+  transition: all .2s ease;
+  color: var(--muted);
+}
+.mode input { display: none; }
+.mode input:checked + span {
+  background: radial-gradient(circle, rgba(0,209,255,.2) 0%, rgba(0,0,0,0) 60%);
+  color: var(--text);
+  padding: .25rem .5rem;
+  border-radius: 999px;
+}
+.mode label:hover {
+  background: rgba(255,255,255,0.05);
+  color: var(--text);
+}
+
+button#processBtn {
+  width: 100%;
+  border: none;
+  outline: none;
+  border-radius: 16px;
+  padding: 0.75rem;
+  background: var(--accent);
+  color: #020203;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: transform .15s ease;
+}
+button#processBtn:hover { transform: translateY(-1px); }
+button#processBtn:active { transform: translateY(1px); }
+
+.loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .75rem;
+  margin-top: 1.6rem;
+}
+.loader.hidden { display: none; }
+
+.ring {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 3px solid rgba(255,255,255,0.05);
+  border-top: 3px solid #00d1ff;
+  animation: spin 1s linear infinite;
+  box-shadow: 0 0 18px rgba(0,209,255,0.45);
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.status {
+  margin-top: 1rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.preview {
+  margin-top: 2rem;
+  background: rgba(3,4,6,0.35);
+  border: 1px solid rgba(255,255,255,0.015);
+  border-radius: 16px;
+  padding: 1rem 1rem 1.2rem;
+}
+.preview.hidden { display: none; }
+.preview h2 {
+  margin: 0 0 .85rem 0;
+  font-size: .85rem;
+  font-weight: 500;
+  color: #fff;
+}
+
+#midiCanvas {
+  width: 100%;
+  border-radius: 12px;
+  background: radial-gradient(circle at 10% 10%, #0b1f2f 0%, #05070b 60%);
+  border: 1px solid rgba(0,209,255,0.04);
+}
+
+.download {
+  margin-top: .75rem;
+}
+.download a {
+  display: inline-block;
+  padding: .4rem .8rem;
+  border-radius: 999px;
+  background: rgba(0,209,255,0.08);
+  border: 1px solid rgba(0,209,255,0.2);
+  color: var(--text);
+  text-decoration: none;
+  font-size: .78rem;
+  transition: all .15s ease;
+}
+.download a:hover {
+  background: rgba(0,209,255,0.15);
+  transform: translateY(-1px);
+}

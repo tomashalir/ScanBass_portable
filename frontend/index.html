@@ -1,0 +1,688 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>ScanBass Studio • Hyperglass</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600&display=swap');
+
+    :root {
+      --bg: radial-gradient(circle at 12% 20%, rgba(0, 255, 191, 0.16), rgba(2, 4, 9, 0.6) 40%),
+             radial-gradient(circle at 82% 12%, rgba(0, 157, 255, 0.12), transparent 46%),
+             radial-gradient(circle at 50% 90%, rgba(106, 29, 255, 0.18), transparent 60%),
+             #03040a;
+      --panel-glass: rgba(8, 10, 18, 0.62);
+      --panel-border: rgba(169, 212, 255, 0.08);
+      --muted: rgba(207, 224, 255, 0.68);
+      --text: #f4f8ff;
+      --accent: #00d1ff;
+      --accent-grad: linear-gradient(120deg, #00f5ff 0%, #9b59ff 45%, #ff63d8 100%);
+      --accent-soft: rgba(0, 209, 255, 0.16);
+      --outline: rgba(255, 255, 255, 0.08);
+      --radius-xl: 28px;
+      color-scheme: dark;
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      background-attachment: fixed;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: clamp(1.8rem, 4vw, 3.2rem);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .nebula {
+      position: fixed;
+      inset: -25vh -25vw;
+      pointer-events: none;
+      background: radial-gradient(circle at 20% 30%, rgba(0, 225, 255, 0.23), transparent 55%),
+                  radial-gradient(circle at 80% 20%, rgba(255, 84, 251, 0.18), transparent 55%),
+                  radial-gradient(circle at 50% 90%, rgba(45, 0, 255, 0.22), transparent 60%);
+      filter: blur(120px);
+      opacity: 0.8;
+      transform: scale(1.1);
+      animation: drift 16s ease-in-out infinite alternate;
+      z-index: 0;
+    }
+
+    @keyframes drift {
+      from { transform: scale(1.05) translate3d(-12px, -10px, 0); }
+      to { transform: scale(1.1) translate3d(12px, 8px, 0); }
+    }
+
+    .constellation {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image: radial-gradient(rgba(255,255,255,0.14) 1px, transparent 1px);
+      background-size: 120px 120px;
+      opacity: 0.3;
+      mask-image: radial-gradient(circle at 50% 50%, rgba(0, 0, 0, 0.65), transparent 75%);
+      z-index: 0;
+    }
+
+    .shell {
+      width: min(1120px, 96vw);
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: clamp(2rem, 4vw, 3.4rem);
+      position: relative;
+      z-index: 1;
+    }
+
+    .panel {
+      background: var(--panel-glass);
+      border: 1px solid var(--panel-border);
+      border-radius: var(--radius-xl);
+      backdrop-filter: blur(28px);
+      box-shadow: 0 32px 80px rgba(2, 10, 30, 0.55);
+      position: relative;
+      overflow: hidden;
+      isolation: isolate;
+    }
+
+    .panel::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background: linear-gradient(140deg, rgba(255,255,255,0.08), transparent 35%);
+      pointer-events: none;
+      mix-blend-mode: screen;
+    }
+
+    .panel::after {
+      content: '';
+      position: absolute;
+      inset: 1px;
+      border-radius: calc(var(--radius-xl) - 1px);
+      border: 1px solid rgba(255,255,255,0.04);
+      pointer-events: none;
+    }
+
+    .brand {
+      padding: clamp(1.8rem, 3vw, 2.6rem);
+      display: flex;
+      flex-direction: column;
+      gap: 1.4rem;
+    }
+
+    .logo-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.45rem 0.9rem;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      background: rgba(0, 255, 199, 0.12);
+      border: 1px solid rgba(0, 255, 199, 0.22);
+      color: rgba(162, 255, 242, 0.92);
+      width: fit-content;
+      font-weight: 600;
+    }
+
+    .logo-badge span {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-grad);
+      box-shadow: 0 0 10px rgba(0, 209, 255, 0.6);
+    }
+
+    h1 {
+      font-family: 'Space Grotesk', 'Inter', sans-serif;
+      font-weight: 600;
+      font-size: clamp(2.4rem, 4vw, 3.1rem);
+      letter-spacing: -0.02em;
+      margin: 0;
+      line-height: 1.08;
+    }
+
+    .tagline {
+      margin: 0;
+      color: rgba(217, 230, 255, 0.8);
+      font-size: clamp(1rem, 2vw, 1.18rem);
+      line-height: 1.5;
+      max-width: 36ch;
+    }
+
+    .highlights {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 0.9rem;
+    }
+
+    .highlights li {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      font-size: 0.95rem;
+      color: var(--muted);
+    }
+
+    .highlights li::before {
+      content: '\2728';
+      font-size: 1rem;
+      color: rgba(255, 192, 255, 0.86);
+      filter: drop-shadow(0 0 10px rgba(255, 120, 255, 0.4));
+      margin-top: 0.05rem;
+    }
+
+    .spectrum {
+      display: grid;
+      gap: 0.35rem;
+      margin-top: 0.2rem;
+    }
+
+    .spectrum span {
+      display: block;
+      height: 4px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(0,209,255,0) 0%, rgba(0,209,255,0.7) 30%, rgba(255,110,248,0.9) 75%, rgba(255,255,255,0) 100%);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .spectrum span::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.9) 40%, transparent 80%);
+      transform: translateX(-100%);
+      animation: sweep 4.5s ease-in-out infinite;
+    }
+
+    .spectrum span:nth-child(2)::after { animation-delay: 1.4s; }
+    .spectrum span:nth-child(3)::after { animation-delay: 2.7s; }
+
+    @keyframes sweep {
+      0% { transform: translateX(-120%); }
+      50% { transform: translateX(10%); }
+      100% { transform: translateX(120%); }
+    }
+
+    .card {
+      padding: clamp(1.9rem, 3.2vw, 2.5rem);
+      display: flex;
+      flex-direction: column;
+      gap: 1.6rem;
+    }
+
+    form {
+      display: grid;
+      gap: 1.2rem;
+    }
+
+    #dropzone {
+      position: relative;
+      border: 1.5px solid rgba(255, 255, 255, 0.08);
+      border-radius: 22px;
+      background: rgba(6, 10, 18, 0.7);
+      padding: 1.6rem 1.4rem 1.7rem;
+      text-align: center;
+      transition: border-color 0.25s ease, transform 0.25s ease, box-shadow 0.35s ease;
+      cursor: pointer;
+      overflow: hidden;
+    }
+
+    #dropzone::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background: radial-gradient(circle at 50% -10%, rgba(0, 209, 255, 0.18), transparent 65%);
+      opacity: 0;
+      transition: opacity 0.35s ease;
+      pointer-events: none;
+    }
+
+    #dropzone:hover,
+    #dropzone.active {
+      border-color: rgba(0, 209, 255, 0.65);
+      transform: translateY(-2px);
+      box-shadow: 0 24px 55px rgba(0, 209, 255, 0.22);
+    }
+
+    #dropzone:hover::before,
+    #dropzone.active::before {
+      opacity: 1;
+    }
+
+    #dropLabel {
+      font-size: 1.05rem;
+      font-weight: 600;
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+      align-items: center;
+      color: rgba(240, 248, 255, 0.95);
+    }
+
+    #dropLabel span.icon {
+      width: 54px;
+      height: 54px;
+      border-radius: 18px;
+      display: grid;
+      place-items: center;
+      background: rgba(0, 209, 255, 0.12);
+      border: 1px solid rgba(0, 209, 255, 0.25);
+      color: #6bf9ff;
+      font-size: 1.8rem;
+      box-shadow: inset 0 0 18px rgba(0, 255, 214, 0.22), 0 12px 30px rgba(0, 209, 255, 0.25);
+    }
+
+    #dropzone small {
+      display: block;
+      margin-top: 0.55rem;
+      color: var(--muted);
+      font-size: 0.78rem;
+      letter-spacing: 0.03em;
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    .mode-note {
+      margin-top: 1.1rem;
+      padding: 0.95rem 1.1rem;
+      border-radius: 18px;
+      background: rgba(6, 10, 18, 0.7);
+      border: 1px solid rgba(0, 209, 255, 0.22);
+      color: rgba(202, 239, 255, 0.85);
+      font-size: 0.82rem;
+      letter-spacing: 0.01em;
+      box-shadow: inset 0 0 0 1px rgba(0, 209, 255, 0.08);
+      display: grid;
+      gap: 0.3rem;
+    }
+
+    .mode-note strong {
+      font-family: 'Space Grotesk', 'Inter', sans-serif;
+      font-size: 0.95rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #ffffff;
+    }
+
+    button#processBtn {
+      width: 100%;
+      border: none;
+      border-radius: 20px;
+      padding: 0.95rem 1.2rem;
+      font-size: 1rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      color: #05070b;
+      cursor: pointer;
+      background: var(--accent-grad);
+      box-shadow: 0 22px 45px rgba(61, 40, 255, 0.45);
+      transition: transform 0.22s ease, box-shadow 0.22s ease;
+    }
+
+    button#processBtn:hover {
+      transform: translateY(-2px) scale(1.01);
+      box-shadow: 0 28px 60px rgba(89, 58, 255, 0.6);
+    }
+
+    .status {
+      font-size: 0.82rem;
+      color: var(--muted);
+      min-height: 1.2rem;
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+    }
+
+    .status span.badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.1rem;
+      height: 1.1rem;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.1);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+      font-size: 0.72rem;
+      color: rgba(255, 255, 255, 0.8);
+    }
+
+    .loader {
+      display: grid;
+      justify-items: center;
+      gap: 1rem;
+      padding: 0.4rem 0 0.8rem;
+    }
+
+    .loader.hidden {
+      display: none;
+    }
+
+    .orbital {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      border: 2.5px solid rgba(255, 255, 255, 0.06);
+      border-top-color: rgba(0, 223, 255, 0.95);
+      border-right-color: rgba(168, 91, 255, 0.8);
+      animation: orbit 1.1s linear infinite;
+      box-shadow: 0 0 22px rgba(0, 209, 255, 0.6);
+    }
+
+    @keyframes orbit {
+      to { transform: rotate(360deg); }
+    }
+
+    #loaderText {
+      font-size: 0.82rem;
+      color: rgba(214, 230, 255, 0.78);
+      letter-spacing: 0.02em;
+    }
+
+    .download-card {
+      margin-top: 1.6rem;
+      background: rgba(6, 9, 18, 0.78);
+      border-radius: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      padding: 1.3rem 1.2rem 1.4rem;
+      display: grid;
+      gap: 0.9rem;
+      box-shadow: inset 0 0 0 1px rgba(0, 209, 255, 0.05);
+    }
+
+    .download-card.hidden {
+      display: none;
+    }
+
+    .download-card h2 {
+      margin: 0;
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: rgba(178, 219, 255, 0.9);
+    }
+
+    .download {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.65rem;
+    }
+
+    .download a {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.5rem 0.95rem;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      text-decoration: none;
+      color: rgba(6, 10, 18, 0.95);
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      background: var(--accent-grad);
+      box-shadow: 0 18px 35px rgba(61, 40, 255, 0.5);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .download a:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 24px 55px rgba(61, 40, 255, 0.6);
+    }
+
+    .download span {
+      font-size: 0.74rem;
+      color: rgba(196, 218, 255, 0.65);
+    }
+
+    footer {
+      font-size: 0.72rem;
+      color: rgba(175, 204, 237, 0.52);
+      display: flex;
+      gap: 0.8rem;
+      flex-wrap: wrap;
+      margin-top: -0.4rem;
+    }
+
+    footer span::before {
+      content: '\2022';
+      margin: 0 0.45rem;
+      opacity: 0.35;
+    }
+
+    footer span:first-child::before {
+      content: '';
+      margin: 0;
+    }
+
+    @media (max-width: 980px) {
+      .shell { grid-template-columns: minmax(0, 1fr); }
+      .panel.brand-panel { order: 1; }
+      .panel.card-panel { order: 2; }
+    }
+
+    @media (max-width: 560px) {
+      body { padding: 1.6rem; }
+      .card, .brand { padding: 1.6rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="nebula"></div>
+  <div class="constellation"></div>
+  <div class="shell">
+    <div class="panel brand-panel brand">
+      <div class="logo-badge"><span></span>ScanBass Studio</div>
+      <h1>Turn any track into a bassline MIDI.</h1>
+      <p class="tagline">Upload your audio — get the bassline as editable MIDI in seconds. Perfect for producers, remixers, and creators.</p>
+      <ul class="highlights">
+        <li>AI-powered bassline detection</li>
+        <li>Clean, DAW-ready MIDI output</li>
+        <li>Works with WAV &amp; MP3</li>
+      </ul>
+      <div class="spectrum" aria-hidden="true">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+      <footer>
+        <span>Tip: Drop the file, render the bassline, and import into Ableton, Logic, or FL Studio.</span>
+        <span>Supports WAV &amp; MP3</span>
+        <span>Latency typically under 20s</span>
+      </footer>
+    </div>
+
+    <div class="panel card-panel card">
+      <form id="uploadForm">
+        <label id="dropzone" for="fileInput">
+          <input type="file" id="fileInput" accept=".wav,.mp3" />
+          <div id="dropLabel">
+            <span class="icon">🎵</span>
+            <span>Drag &amp; drop or click to upload</span>
+          </div>
+          <small>ScanBass — extract and render only the bassline.</small>
+        </label>
+
+        <div class="mode-note">
+          <strong>Poly mode</strong>
+          <span>Full-spectrum transcription locks onto the bassline while respecting the mix.</span>
+          <span>Delivers a ZIP with the bassline rendered as a standard MIDI file for your DAW.</span>
+        </div>
+
+        <button type="submit" id="processBtn">Render MIDI</button>
+      </form>
+
+      <div id="loader" class="loader hidden" role="status" aria-live="polite">
+        <div class="orbital"></div>
+        <p id="loaderText">Analyzing spectral fingerprints…</p>
+      </div>
+
+      <div id="status" class="status" aria-live="polite"></div>
+
+      <div id="downloadCard" class="download-card hidden">
+        <h2>MIDI Ready</h2>
+        <div id="midiDownload" class="download"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = "http://localhost:8000";
+    const form = document.getElementById("uploadForm");
+    const dropzone = document.getElementById("dropzone");
+    const fileInput = document.getElementById("fileInput");
+    const loader = document.getElementById("loader");
+    const statusDiv = document.getElementById("status");
+    const downloadCard = document.getElementById("downloadCard");
+    const midiDownload = document.getElementById("midiDownload");
+    let currentDownloadUrl = null;
+
+    const statusBadge = document.createElement("span");
+    statusBadge.className = "badge";
+
+    function setStatus(message, badge = "") {
+      statusDiv.textContent = "";
+      if (!message) return;
+      if (badge) {
+        statusBadge.textContent = badge;
+        const badgeClone = statusBadge.cloneNode(true);
+        statusDiv.appendChild(badgeClone);
+      }
+      statusDiv.append(message);
+    }
+
+    ["dragenter", "dragover", "dragleave", "drop"].forEach(ev => {
+      dropzone.addEventListener(ev, e => {
+        e.preventDefault();
+        e.stopPropagation();
+      });
+    });
+
+    ["dragenter", "dragover"].forEach(ev => {
+      dropzone.addEventListener(ev, () => dropzone.classList.add("active"));
+    });
+
+    ["dragleave", "drop"].forEach(ev => {
+      dropzone.addEventListener(ev, () => dropzone.classList.remove("active"));
+    });
+
+    dropzone.addEventListener("drop", e => {
+      const file = e.dataTransfer.files[0];
+      if (file) {
+        fileInput.files = e.dataTransfer.files;
+        updateDropLabel(file.name);
+      }
+    });
+
+    fileInput.addEventListener("change", () => {
+      if (fileInput.files.length > 0) {
+        updateDropLabel(fileInput.files[0].name);
+      }
+    });
+
+    function updateDropLabel(filename) {
+      const label = document.getElementById("dropLabel");
+      label.innerHTML = `<span class="icon">✅</span><span>${filename}</span>`;
+    }
+
+    form.addEventListener("submit", async e => {
+      e.preventDefault();
+      const file = fileInput.files[0];
+      if (!file) {
+        setStatus("Please select a file.", "!");
+        return;
+      }
+      const mode = "poly";
+
+      loader.classList.remove("hidden");
+      setStatus("Uploading to ScanBass cloud…", "↑");
+      downloadCard.classList.add("hidden");
+      if (currentDownloadUrl) {
+        URL.revokeObjectURL(currentDownloadUrl);
+        currentDownloadUrl = null;
+      }
+      midiDownload.innerHTML = "";
+
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("mode", mode);
+
+      try {
+        const resp = await fetch(`${API_BASE}/jobs`, { method: "POST", body: fd });
+        const data = await resp.json();
+        if (!data.job_id) {
+          loader.classList.add("hidden");
+          setStatus("Could not start the job.", "!");
+          return;
+        }
+        const jobId = data.job_id;
+        setStatus("Analyzing audio…", "●");
+
+        const poll = setInterval(async () => {
+          try {
+            const r = await fetch(`${API_BASE}/jobs/${encodeURIComponent(jobId)}`);
+            const job = await r.json();
+            if (job.status === "succeeded") {
+              clearInterval(poll);
+              loader.classList.add("hidden");
+              setStatus("Done! Preparing download…", "✔");
+              const dl = await fetch(`${API_BASE}/jobs/${encodeURIComponent(jobId)}/download`);
+              const blob = await dl.blob();
+              await handleMidiBlob(blob);
+            } else if (job.status === "failed") {
+              clearInterval(poll);
+              loader.classList.add("hidden");
+              setStatus(`Failed: ${job.error || 'neznámá chyba'}`, "✖");
+            } else {
+              const statusLabel = job.status === "queued" ? "Ve frontě" : "Processing";
+              setStatus(`${statusLabel}…`, job.status === "queued" ? "…" : "●");
+            }
+          } catch (err) {
+            clearInterval(poll);
+            loader.classList.add("hidden");
+            setStatus("Error while fetching job status.", "!");
+          }
+        }, 2500);
+      } catch (err) {
+        console.error(err);
+        loader.classList.add("hidden");
+        setStatus(`Error: ${err.message}`, "!");
+      }
+    });
+
+    async function handleMidiBlob(blob) {
+      if (currentDownloadUrl) {
+        URL.revokeObjectURL(currentDownloadUrl);
+      }
+      currentDownloadUrl = URL.createObjectURL(blob);
+      // tohle je přesně to, co poslal Codex – ZIP varianta
+      midiDownload.innerHTML = `<a href="${currentDownloadUrl}" download="scanbass-output.zip">⬇️ Download MIDI ZIP</a><span>File: scanbass-output.zip</span>`;
+      downloadCard.classList.remove("hidden");
+      setStatus("MIDI is ready to download.", "⬇️");
+    }
+
+    window.addEventListener("beforeunload", () => {
+      if (currentDownloadUrl) {
+        URL.revokeObjectURL(currentDownloadUrl);
+      }
+    });
+  </script>
+</body>
+</html>
+
