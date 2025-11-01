@@ -13,6 +13,7 @@ import sys
 import os
 import asyncio
 import logging
+import subprocess
 import shutil
 import tempfile
 import uuid
@@ -34,6 +35,13 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 logger = logging.getLogger(__name__)
+
+# maximum amount of audio (in seconds) that the backend will process per job
+MAX_UPLOAD_DURATION_SECONDS = 30.0
+
+
+class UnsupportedAudioError(Exception):
+    """Raised when a trimming strategy cannot decode the uploaded audio."""
 
 # Render gives us PORT; locally we can leave 8000.
 PORT_ENV = os.getenv("PORT")
@@ -88,7 +96,184 @@ def _save_upload(upload: UploadFile) -> Path:
     with temp_path.open("wb") as f:
         shutil.copyfileobj(upload.file, f)
     upload.file.close()
-    return temp_path
+    return _enforce_max_duration(temp_path, MAX_UPLOAD_DURATION_SECONDS)
+
+
+def _enforce_max_duration(audio_path: Path, max_seconds: float) -> Path:
+    """Trim an uploaded audio file to the first ``max_seconds`` seconds."""
+
+    if max_seconds <= 0:
+        return audio_path
+
+    try:
+        return _trim_with_soundfile(audio_path, max_seconds)
+    except UnsupportedAudioError:
+        logger.debug("Falling back to ffmpeg trimming for %s", audio_path)
+        return _trim_with_ffmpeg(audio_path, max_seconds)
+
+
+def _trim_with_soundfile(audio_path: Path, max_seconds: float) -> Path:
+    try:
+        import soundfile as sf  # type: ignore
+    except Exception as exc:  # pragma: no cover - dependency missing
+        raise UnsupportedAudioError from exc
+
+    try:
+        with sf.SoundFile(str(audio_path)) as sound_file:
+            samplerate = sound_file.samplerate
+            total_frames = len(sound_file)
+            if total_frames == 0:
+                raise HTTPException(status_code=400, detail="Uploaded audio is empty")
+
+            max_frames = int(max_seconds * samplerate)
+            needs_trim = total_frames > max_frames
+            frames_to_read = min(total_frames, max_frames)
+
+            sound_file.seek(0)
+            data = sound_file.read(frames=frames_to_read)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise UnsupportedAudioError from exc
+
+    if not needs_trim:
+        return audio_path
+
+    safe_suffixes = {".wav", ".flac", ".ogg", ".oga", ".aiff", ".aif", ".aifc"}
+    suffix = audio_path.suffix.lower()
+    target_path = audio_path
+    if suffix not in safe_suffixes:
+        target_path = audio_path.with_suffix(".wav")
+
+    try:
+        sf.write(str(target_path), data, samplerate)
+    except Exception as exc:  # pragma: no cover - disk write failure
+        raise HTTPException(status_code=500, detail="Failed to store trimmed audio") from exc
+
+    if target_path != audio_path:
+        try:
+            audio_path.unlink()
+        except OSError:
+            pass
+
+    actual_duration = frames_to_read / float(samplerate)
+    logger.info(
+        "Trimmed uploaded audio to %.2f seconds (original: %.2f seconds)",
+        actual_duration,
+        total_frames / float(samplerate),
+    )
+
+    return target_path
+
+
+def _trim_with_ffmpeg(audio_path: Path, max_seconds: float) -> Path:
+    try:
+        import audioread  # type: ignore
+    except Exception as exc:  # pragma: no cover - dependency missing
+        raise HTTPException(status_code=500, detail="Audio backend unavailable") from exc
+
+    try:
+        with audioread.audio_open(str(audio_path)) as reader:
+            duration = reader.duration
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Could not read uploaded audio") from exc
+
+    if duration is None or duration <= 0:
+        raise HTTPException(status_code=400, detail="Uploaded audio is empty")
+
+    if duration <= max_seconds:
+        return audio_path
+
+    suffix = audio_path.suffix or ""
+    temp_copy_path = audio_path.with_name(audio_path.stem + "_trimmed" + suffix)
+
+    if suffix:
+        if _run_ffmpeg_trim(audio_path, temp_copy_path, max_seconds, copy_codec=True):
+            try:
+                audio_path.unlink()
+            except OSError:
+                pass
+            temp_copy_path.replace(audio_path)
+            logger.info(
+                "Trimmed uploaded audio from %.2f to %.2f seconds using ffmpeg (copy)",
+                duration,
+                max_seconds,
+            )
+            return audio_path
+
+    temp_wav_path = audio_path.with_name(audio_path.stem + "_trimmed.wav")
+    if _run_ffmpeg_trim(audio_path, temp_wav_path, max_seconds, copy_codec=False):
+        try:
+            audio_path.unlink()
+        except OSError:
+            pass
+        final_path = audio_path.with_suffix(".wav")
+        if final_path != temp_wav_path:
+            try:
+                final_path.unlink()
+            except OSError:
+                pass
+            temp_wav_path.replace(final_path)
+        else:
+            final_path = temp_wav_path
+        logger.info(
+            "Trimmed uploaded audio from %.2f to %.2f seconds using ffmpeg (re-encode)",
+            duration,
+            max_seconds,
+        )
+        return final_path
+
+    raise HTTPException(status_code=500, detail="Failed to trim uploaded audio")
+
+
+def _run_ffmpeg_trim(
+    source: Path, target: Path, max_seconds: float, *, copy_codec: bool
+) -> bool:
+    args = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(source),
+        "-t",
+        str(max_seconds),
+    ]
+    if copy_codec:
+        args.extend(["-c", "copy"])
+    else:
+        args.extend(["-acodec", "pcm_s16le", "-ar", "44100"])
+    args.append(str(target))
+
+    try:
+        result = subprocess.run(
+            args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="Audio backend unavailable")
+
+    if result.returncode != 0:
+        logger.warning(
+            "ffmpeg trim failed (copy=%s) for %s: %s",
+            copy_codec,
+            source,
+            result.stderr.decode(errors="ignore"),
+        )
+        try:
+            target.unlink()
+        except OSError:
+            pass
+        return False
+
+    logger.debug(
+        "ffmpeg trim succeeded for %s (copy=%s)",
+        source,
+        copy_codec,
+    )
+    return True
 
 
 def _make_job_id(input_name: str, mode: str) -> str:
