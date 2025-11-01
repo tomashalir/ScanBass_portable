@@ -223,16 +223,15 @@ async def download_results(job_id: str):
 if __name__ == "__main__":
     import uvicorn
 
+    from port_config import PortResolutionError, apply_port_to_env, resolve_port
+
     host = os.getenv("SCANBASS_HOST", "0.0.0.0")
-    port_raw = os.getenv("SCANBASS_PORT") or os.getenv("PORT") or "8000"
+
     try:
-        port = int(port_raw)
-    except ValueError as exc:
-        raise RuntimeError(
-            f"SCANBASS_PORT/PORT must be an integer (received {port_raw!r})"
-        ) from exc
+        port = resolve_port(fallback=8000)
+    except PortResolutionError as exc:  # pragma: no cover - defensive startup guard
+        raise SystemExit(str(exc))
 
-    if not (0 < port < 65536):
-        raise RuntimeError(f"Port must be between 1 and 65535 (received {port})")
-
-    uvicorn.run("src.web_service:app", host=host, port=port, reload=False)
+    apply_port_to_env(port)
+    logger.info("Starting ScanBass backend on %s:%s", host, port)
+    uvicorn.run(app, host=host, port=port, reload=False)
