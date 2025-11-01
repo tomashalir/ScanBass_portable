@@ -14,8 +14,20 @@ def main():
     p.add_argument("--frame-hz", type=int, default=40, help="Poly: frames per second for lowest-voice (default 40)")
     p.add_argument("--min-note-len", type=int, default=90, help="Poly: min note length in ms (default 90)")
     p.add_argument("--gap-merge", type=int, default=60, help="Poly: merge micro-gaps of same pitch in ms (default 60)")
+    p.add_argument("--bp-onset-threshold", type=float, default=0.5,
+                   help="Poly: Basic Pitch onset threshold (0-1, default 0.5)")
+    p.add_argument("--bp-frame-threshold", type=float, default=0.3,
+                   help="Poly: Basic Pitch frame threshold (0-1, default 0.3)")
+    p.add_argument("--bp-min-note-ms", type=float, default=127.7,
+                   help="Poly: Basic Pitch minimum note length in ms (default 127.7)")
+    p.add_argument("--bp-min-frequency", type=float, default=None,
+                   help="Poly: Basic Pitch minimum frequency in Hz (optional)")
+    p.add_argument("--bp-max-frequency", type=float, default=None,
+                   help="Poly: Basic Pitch maximum frequency in Hz (optional)")
     # bass controls
     p.add_argument("--voicing-threshold", type=float, default=0.5, help="Bass: torchcrepe voicing threshold (default 0.5)")
+    p.add_argument("--segment-seconds", type=float, default=15.0, help="Bass: Demucs segment length in seconds (default 15.0)")
+    p.add_argument("--segment-overlap", type=float, default=0.1, help="Bass: Demucs segment overlap ratio (default 0.1)")
     args = p.parse_args()
 
     in_path = Path(args.input).resolve()
@@ -35,7 +47,12 @@ def main():
             out_dir=str(out_dir),
             frame_hz=args.frame_hz,
             min_note_len_ms=args.min_note_len,
-            gap_merge_ms=args.gap_merge
+            gap_merge_ms=args.gap_merge,
+            onset_threshold=args.bp_onset_threshold,
+            frame_threshold=args.bp_frame_threshold,
+            basic_pitch_min_note_len_ms=args.bp_min_note_ms,
+            minimum_frequency=args.bp_min_frequency,
+            maximum_frequency=args.bp_max_frequency,
         )
     else:
         from modes.bass_mode import run_bass_mode
@@ -44,7 +61,9 @@ def main():
         result = run_bass_mode(
             audio_path=str(in_path),
             out_dir=str(out_dir),
-            voicing_threshold=args.voicing_threshold
+            voicing_threshold=args.voicing_threshold,
+            segment_seconds=args.segment_seconds,
+            overlap=args.segment_overlap
         )
 
     with open(out_dir / "log.json", "w", encoding="utf-8") as f:

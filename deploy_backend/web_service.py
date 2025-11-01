@@ -102,6 +102,12 @@ def _job_output_dir(job_id: str) -> Path:
     return out_dir
 
 
+def _optional_float(value: Optional[object]) -> Optional[float]:
+    if value is None or value == "":
+        return None
+    return float(value)
+
+
 async def _run_mode(mode: str, audio_path: Path, out_dir: Path, **params):
     # LAZY IMPORTS – tady se teprve tahají těžké věci
     if mode == "bass":
@@ -112,10 +118,15 @@ async def _run_mode(mode: str, audio_path: Path, out_dir: Path, **params):
             str(audio_path),
             str(out_dir),
             voicing_threshold=float(params.get("voicing_threshold", 0.5)),
+            segment_seconds=float(params.get("segment_seconds", 15.0)),
+            overlap=float(params.get("segment_overlap", 0.1)),
         )
 
     if mode == "poly":
         from src.modes.poly_mode import run_poly_mode  # type: ignore
+
+        min_freq = _optional_float(params.get("bp_min_frequency"))
+        max_freq = _optional_float(params.get("bp_max_frequency"))
 
         return await asyncio.to_thread(
             run_poly_mode,
@@ -124,6 +135,11 @@ async def _run_mode(mode: str, audio_path: Path, out_dir: Path, **params):
             frame_hz=int(params.get("frame_hz", 40)),
             min_note_len_ms=int(params.get("min_note_len_ms", 90)),
             gap_merge_ms=int(params.get("gap_merge_ms", 60)),
+            onset_threshold=float(params.get("bp_onset_threshold", 0.5)),
+            frame_threshold=float(params.get("bp_frame_threshold", 0.3)),
+            basic_pitch_min_note_len_ms=float(params.get("bp_min_note_ms", 127.7)),
+            minimum_frequency=min_freq,
+            maximum_frequency=max_freq,
         )
 
     raise HTTPException(status_code=400, detail=f"Unsupported mode: {mode}")
@@ -142,9 +158,16 @@ async def _execute_job(
     saved_path: Path,
     *,
     voicing_threshold: float,
+    segment_seconds: float,
+    segment_overlap: float,
     frame_hz: int,
     min_note_len_ms: int,
     gap_merge_ms: int,
+    bp_onset_threshold: float,
+    bp_frame_threshold: float,
+    bp_min_note_ms: float,
+    bp_min_frequency: Optional[float],
+    bp_max_frequency: Optional[float],
 ):
     async with JOB_LOCK:
         job.status = "running"
@@ -152,9 +175,16 @@ async def _execute_job(
     out_dir = _job_output_dir(job.job_id)
     params = dict(
         voicing_threshold=voicing_threshold,
+        segment_seconds=segment_seconds,
+        segment_overlap=segment_overlap,
         frame_hz=frame_hz,
         min_note_len_ms=min_note_len_ms,
         gap_merge_ms=gap_merge_ms,
+        bp_onset_threshold=bp_onset_threshold,
+        bp_frame_threshold=bp_frame_threshold,
+        bp_min_note_ms=bp_min_note_ms,
+        bp_min_frequency=bp_min_frequency,
+        bp_max_frequency=bp_max_frequency,
     )
 
     try:
@@ -190,9 +220,16 @@ async def submit_job(
     file: UploadFile = File(...),
     mode: str = Form(...),
     voicing_threshold: float = Form(0.5),
+    segment_seconds: float = Form(15.0),
+    segment_overlap: float = Form(0.1),
     frame_hz: int = Form(40),
     min_note_len_ms: int = Form(90),
     gap_merge_ms: int = Form(60),
+    bp_onset_threshold: float = Form(0.5),
+    bp_frame_threshold: float = Form(0.3),
+    bp_min_note_ms: float = Form(127.7),
+    bp_min_frequency: Optional[float] = Form(None),
+    bp_max_frequency: Optional[float] = Form(None),
 ):
     mode_normalized = mode.lower().strip()
     if mode_normalized not in {"bass", "poly"}:
@@ -214,9 +251,16 @@ async def submit_job(
             job,
             saved_path,
             voicing_threshold=voicing_threshold,
+            segment_seconds=segment_seconds,
+            segment_overlap=segment_overlap,
             frame_hz=frame_hz,
             min_note_len_ms=min_note_len_ms,
             gap_merge_ms=gap_merge_ms,
+            bp_onset_threshold=bp_onset_threshold,
+            bp_frame_threshold=bp_frame_threshold,
+            bp_min_note_ms=bp_min_note_ms,
+            bp_min_frequency=bp_min_frequency,
+            bp_max_frequency=bp_max_frequency,
         )
     )
 
