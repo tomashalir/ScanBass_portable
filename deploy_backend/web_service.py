@@ -1,16 +1,17 @@
 from __future__ import annotations
 
 """
-ScanBass – WAV-only, lightweight backend (MVP)
+ScanBass – WAV-only, lightweight backend (MVP + warmup)
 
 Hodnotová nabídka:
-- uživatel nahraje AUDIO (.wav) NEBO už hotové MIDI
+- uživatel nahraje AUDIO (.wav) nebo už hotové MIDI
 - backend z audia udělá: wav -> (band-pass -> YIN) -> MIDI -> vybere nejnižší linku
 - pokud nahraje MIDI, jen vybere nejnižší linku
 - frontend může dál používat POST /jobs + GET /jobs/{id}
 
 Omezení:
 - AUDIO: jen .wav (kvůli rychlosti na Render Starter)
+- warmup při startu pro zkrácení cold start latency
 """
 
 import io
@@ -36,7 +37,7 @@ TARGET_SR = 16000
 BASS_LOW = 40
 BASS_HIGH = 300
 
-app = FastAPI(title="ScanBass – WAV-only MVP")
+app = FastAPI(title="ScanBass – WAV-only MVP (with warmup)")
 
 app.add_middleware(
     CORSMiddleware,
@@ -303,14 +304,25 @@ def notes_to_midi(bass_notes: List[Dict], ticks_per_beat: int) -> mido.MidiFile:
 
 
 # ---------------------------------------------------------
-# API – kompatibilní s tvým frontendem
+# Warmup při startu – inicializace librosy
+# ---------------------------------------------------------
+@app.on_event("startup")
+async def warmup():
+    try:
+        sr = TARGET_SR
+        # vygenerujeme 1 sekundu ticha a "proženeme" pipeline
+        y = np.zeros(sr, dtype=np.float32)
+        _ = audio_wav_to_bass_midi(y, sr)
+        print("Warmup completed – librosa initialized.")
+    except Exception as e:
+        print("Warmup failed:", e)
+
+
+# ---------------------------------------------------------
+# API – kompatibilní s frontendem
 # ---------------------------------------------------------
 @app.post("/jobs")
 async def create_job(file: UploadFile = File(...)):
-    """
-    - když přijde .mid/.midi -> jen vybereme basu
-    - když přijde cokoliv jiného -> bereme to jako .wav (MVP omezení)
-    """
     filename = (file.filename or "").lower()
     data = await file.read()
 
@@ -319,13 +331,10 @@ async def create_job(file: UploadFile = File(...)):
 
     try:
         if filename.endswith((".mid", ".midi")):
-            # už je to MIDI -> nejnižší linka
             result_bytes = midi_bytes_to_bassline(data)
         else:
-            # WAV-only větev
             if not filename.endswith(".wav"):
                 raise ValueError("Only .wav is supported in this MVP version.")
-            # načtení WAV
             y, sr = sf.read(io.BytesIO(data))
             if y.ndim > 1:
                 y = y.mean(axis=1)  # stereo -> mono
