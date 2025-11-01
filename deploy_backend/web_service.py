@@ -7,7 +7,7 @@ ScanBass – WAV-only backend (MVP)
 - GET  /jobs/{id} : vrátí přímo .mid ke stažení
 - název souboru: scanbass_<original_basename>.mid
 
-Omezení MVP:
+Omezení:
 - audio: jen .wav (kvůli rychlosti na Render Starter)
 """
 
@@ -24,7 +24,7 @@ import mido
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 # ---------------------------------------------------------
 # Konfigurace
@@ -37,14 +37,15 @@ BASS_HIGH = 300
 app = FastAPI(title="ScanBass – WAV-only MVP")
 
 app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    CORSMiddleware(
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 )
 
-# in-memory "databáze" jobů
+# in-memory "DB"
 # JOBS[job_id] = {
 #   "status": "done" | "processing" | "error",
 #   "result": bytes | None,
@@ -55,7 +56,7 @@ JOBS: Dict[str, Dict[str, Any]] = {}
 
 
 # ---------------------------------------------------------
-# Healthcheck pro Render
+# Healthcheck
 # ---------------------------------------------------------
 @app.get("/")
 async def root():
@@ -210,7 +211,7 @@ def midi_to_note_intervals(mid: mido.MidiFile) -> List[Dict]:
                         }
                     )
 
-    # uzavřít otevřené
+    # ukončit otevřené
     if active:
         max_time = 0
         for track in mid.tracks:
@@ -305,7 +306,7 @@ def notes_to_midi(bass_notes: List[Dict], ticks_per_beat: int) -> mido.MidiFile:
 
 
 # ---------------------------------------------------------
-# Warmup (aby první request nebyl 30 s)
+# Warmup
 # ---------------------------------------------------------
 @app.on_event("startup")
 async def warmup():
@@ -319,23 +320,28 @@ async def warmup():
 
 
 # ---------------------------------------------------------
-# API – kompatibilní s frontendem
+# API
 # ---------------------------------------------------------
 @app.post("/jobs")
 async def create_job(file: UploadFile = File(...)):
-    filename = (file.filename or "").lower()
+    filename_lower = (file.filename or "").lower()
     original_name = file.filename or "input"
 
     data = await file.read()
 
     job_id = str(uuid.uuid4())
-    JOBS[job_id] = {"status": "processing", "result": None, "error": None, "original_name": original_name}
+    JOBS[job_id] = {
+        "status": "processing",
+        "result": None,
+        "error": None,
+        "original_name": original_name,
+    }
 
     try:
-        if filename.endswith((".mid", ".midi")):
+        if filename_lower.endswith((".mid", ".midi")):
             result_bytes = midi_bytes_to_bassline(data)
         else:
-            if not filename.endswith(".wav"):
+            if not filename_lower.endswith(".wav"):
                 raise ValueError("Only .wav is supported in this MVP version.")
             y, sr = sf.read(io.BytesIO(data))
             if y.ndim > 1:
@@ -362,23 +368,25 @@ async def get_job(job_id: str):
         raise HTTPException(status_code=404, detail="Job not found")
 
     if job["status"] == "processing":
-        # frontend polluje -> dáme mu JSON
         return {"job_id": job_id, "status": "processing"}
 
     if job["status"] == "error":
         return {"job_id": job_id, "status": "error", "error": job["error"]}
 
-    # hotovo -> vracíme přímo soubor
+    # hotovo -> vrátíme přímo soubor jako stream
     result_bytes: bytes = job["result"]
     original_name: str = job.get("original_name") or "output"
-    # sundat příponu
+
+    # sundat příponu, aby název byl hezký
     if "." in original_name:
         original_name = original_name.rsplit(".", 1)[0]
 
-    filename = f"scanbass_{original_name}.mid"
+    download_name = f"scanbass_{original_name}.mid"
 
-    return FileResponse(
-        path_or_file=io.BytesIO(result_bytes),
+    return StreamingResponse(
+        io.BytesIO(result_bytes),
         media_type="audio/midi",
-        filename=filename,
+        headers={
+            "Content-Disposition": f'attachment; filename="{download_name}"'
+        },
     )
