@@ -81,6 +81,16 @@ JOB_LOCK = asyncio.Lock()
 JOBS: Dict[str, JobState] = {}
 
 
+@app.get("/", tags=["service"])
+async def read_root() -> Dict[str, str]:
+    """Simple landing endpoint for browsers and uptime checks."""
+
+    return {
+        "service": "ScanBass backend",
+        "message": "Submit audio via POST /jobs. See /health for status.",
+    }
+
+
 def _save_upload(upload: UploadFile) -> Path:
     suffix = Path(upload.filename or "input.wav").suffix or ".wav"
     temp_dir = Path(tempfile.mkdtemp(prefix="scanbass_"))
