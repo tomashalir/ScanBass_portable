@@ -49,3 +49,23 @@ outputs\test_bass\bassline.mid
 ## Notes
 - First Demucs/Basic Pitch run downloads models to cache (one‑time).
 - Warnings from torchaudio/pretty_midi are OK.
+
+## FastAPI backend
+
+The deployment backend under `deploy_backend/web_service.py` exposes the polling API used by the desktop/frontend builds. Two modes are available and controlled through the `SCANBASS_MODE` environment variable:
+
+- `SCANBASS_MODE=light` (default) – the original lightweight YIN + heuristics chain.
+- `SCANBASS_MODE=heavy` – Demucs stem separation followed by torchcrepe F0 tracking for a high-fidelity bass transcription.
+
+### Running locally
+
+```bash
+python -m pip install -r deploy_backend/requirements.txt
+SCANBASS_MODE=heavy uvicorn deploy_backend.web_service:app --host 0.0.0.0 --port 8000
+```
+
+Upload `.wav` or `.mp3` files up to 30 seconds to `POST /jobs` and poll `GET /jobs/{id}` for results. Completed jobs stream the file download as `scanbass_<original>.mid`.
+
+### Warmup & model caching
+
+On startup the FastAPI application automatically executes a warmup pass of the currently selected transcription pipeline. This preloads Demucs/torchcrepe weights (heavy mode) or the lightweight filters (light mode) so subsequent jobs avoid first-hit latency. To pre-download models on fresh machines, run the server once with `SCANBASS_MODE=heavy` (or call the root endpoint) before accepting traffic; the warmup will populate the torch cache directories.
