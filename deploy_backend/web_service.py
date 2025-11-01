@@ -1,41 +1,29 @@
 from __future__ import annotations
 
-"""
-ScanBass – WAV-only backend (MVP)
----------------------------------
-- POST /jobs  : přijme .wav nebo .mid
-- GET  /jobs/{id} : vrátí přímo .mid ke stažení
-- název souboru: scanbass_<original_basename>.mid
-
-Omezení:
-- audio: jen .wav (kvůli rychlosti na Render Starter)
-"""
+"""ScanBass backend with dual transcription modes."""
 
 import io
+import os
 import uuid
-from typing import Dict, Any, List, Tuple
+from typing import Any, Dict, List, Tuple
 
-import numpy as np
-import soundfile as sf
 import librosa
-from scipy.signal import butter, sosfilt
-import pretty_midi
 import mido
-
-from fastapi import FastAPI, UploadFile, File, HTTPException
+import numpy as np
+import pretty_midi
+import soundfile as sf
+from fastapi import File, FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
-# ---------------------------------------------------------
-# Konfigurace
-# ---------------------------------------------------------
 MAX_SECONDS = 30.0
-TARGET_SR = 16000
+LIGHT_TARGET_SR = 16000
 BASS_LOW = 40
 BASS_HIGH = 300
 
-app = FastAPI(title="ScanBass – WAV-only MVP")
+SCANBASS_MODE = os.getenv("SCANBASS_MODE", "light").strip().lower()
 
+app = FastAPI(title="ScanBass backend")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -44,35 +32,168 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# in-memory "DB"
-# JOBS[job_id] = {
-#   "status": "done" | "processing" | "error",
-#   "result": bytes | None,
-#   "error": str | None,
-#   "original_name": str | None
-# }
 JOBS: Dict[str, Dict[str, Any]] = {}
 
 
-# ---------------------------------------------------------
-# Healthcheck
-# ---------------------------------------------------------
-@app.get("/")
-async def root():
-    return {"ok": True, "message": "scanbass wav-only online", "jobs": len(JOBS)}
+class BaseBassTranscriber:
+    name = "base"
+
+    def audio_to_midi(self, y: np.ndarray, sr: int) -> pretty_midi.PrettyMIDI:
+        raise NotImplementedError
+
+    def warmup(self) -> None:
+        sr = LIGHT_TARGET_SR
+        silence = np.zeros(int(sr * 1.0), dtype=np.float32)
+        self.audio_to_midi(silence, sr)
 
 
-@app.head("/")
-async def root_head():
-    return JSONResponse(content={"ok": True})
+class LightBassTranscriber(BaseBassTranscriber):
+    name = "light"
+
+    @staticmethod
+    def bandpass(y: np.ndarray, sr: int, low: int = BASS_LOW, high: int = BASS_HIGH, order: int = 4) -> np.ndarray:
+        from scipy.signal import butter, sosfilt
+
+        sos = butter(order, [low, high], btype="band", fs=sr, output="sos")
+        return sosfilt(sos, y)
+
+    def audio_to_midi(self, y: np.ndarray, sr: int) -> pretty_midi.PrettyMIDI:
+        max_samples = int(MAX_SECONDS * sr)
+        y = y[:max_samples]
+
+        if sr != LIGHT_TARGET_SR:
+            y = librosa.resample(y, orig_sr=sr, target_sr=LIGHT_TARGET_SR)
+            sr = LIGHT_TARGET_SR
+
+        y_bp = self.bandpass(y, sr)
+
+        hop_length = 512
+        pitches = librosa.yin(
+            y_bp,
+            fmin=librosa.note_to_hz("C1"),
+            fmax=librosa.note_to_hz("C5"),
+            sr=sr,
+            frame_length=2048,
+            hop_length=hop_length,
+        )
+
+        S = np.abs(librosa.stft(y_bp, n_fft=2048, hop_length=hop_length))
+        rms = librosa.feature.rms(S=S)[0]
+        conf = (rms - rms.min()) / (rms.max() - rms.min() + 1e-9)
+
+        events = frames_to_events(pitches, conf, hop_length, sr, min_conf=0.15, merge_gap_s=0.12)
+        return events_to_pretty_midi(events)
 
 
-# ---------------------------------------------------------
-# DSP / audio -> MIDI (basa)
-# ---------------------------------------------------------
-def bandpass(y: np.ndarray, sr: int, low: int = BASS_LOW, high: int = BASS_HIGH, order: int = 4) -> np.ndarray:
-    sos = butter(order, [low, high], btype="band", fs=sr, output="sos")
-    return sosfilt(sos, y)
+class HeavyBassTranscriber(BaseBassTranscriber):
+    name = "heavy"
+
+    def __init__(self) -> None:
+        try:
+            import torch
+            import torchaudio
+            import torchcrepe
+            from demucs.apply import apply_model as demucs_apply_model
+            from demucs.pretrained import get_model as demucs_get_model
+        except ImportError as exc:  # pragma: no cover - runtime guard
+            raise RuntimeError(
+                "Heavy mode requires torch, torchaudio, torchcrepe, and demucs to be installed"
+            ) from exc
+
+        self.torch = torch
+        self.torchaudio = torchaudio
+        self.torchcrepe = torchcrepe
+        self.demucs_apply_model = demucs_apply_model
+        self.demucs_get_model = demucs_get_model
+
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.crepe_sample_rate = 16000
+        self.crepe_hop_length = 160  # 10 ms at 16 kHz
+        self.fmin = librosa.note_to_hz("E1")
+        self.fmax = librosa.note_to_hz("C5")
+        self._demucs_model = None
+        self._crepe_loaded = False
+
+    def warmup(self) -> None:
+        silence = np.zeros(int(self.crepe_sample_rate), dtype=np.float32)
+        self.audio_to_midi(silence, self.crepe_sample_rate)
+
+    # Lazy init helpers -------------------------------------------------
+    def _ensure_demucs(self) -> None:
+        if self._demucs_model is None:
+            model = self.demucs_get_model("htdemucs")
+            model.to(self.device)
+            model.eval()
+            self._demucs_model = model
+
+    def _ensure_crepe(self) -> None:
+        if not self._crepe_loaded:
+            self.torchcrepe.load.model("full", device=self.device)
+            self._crepe_loaded = True
+
+    # Processing --------------------------------------------------------
+    def audio_to_midi(self, y: np.ndarray, sr: int) -> pretty_midi.PrettyMIDI:
+        torch = self.torch
+        torchaudio = self.torchaudio
+
+        mono = torch.from_numpy(y.astype(np.float32))
+        if mono.ndim == 1:
+            mono = mono.unsqueeze(0)
+        elif mono.ndim > 2:
+            mono = mono.view(1, -1)
+
+        max_samples = int(MAX_SECONDS * sr)
+        if mono.shape[-1] > max_samples:
+            mono = mono[..., :max_samples]
+
+        if sr != 44100:
+            mono = torchaudio.functional.resample(mono, sr, 44100)
+            sr = 44100
+
+        if mono.shape[0] == 1:
+            stereo = mono.repeat(2, 1)
+        else:
+            stereo = mono
+
+        self._ensure_demucs()
+        demucs_inp = stereo.unsqueeze(0).to(self.device)
+
+        with torch.inference_mode():
+            separated = self.demucs_apply_model(self._demucs_model, demucs_inp, progress=False)
+
+        # separated: (batch, sources, channels, time)
+        separated = separated[0]
+        bass_index = self._demucs_model.sources.index("bass")
+        bass = separated[bass_index]
+        bass_mono = bass.mean(dim=0, keepdim=True)
+
+        if sr != self.crepe_sample_rate:
+            bass_mono = torchaudio.functional.resample(bass_mono, sr, self.crepe_sample_rate)
+            sr = self.crepe_sample_rate
+
+        bass_mono = bass_mono.clamp(-1.0, 1.0)
+        hop_length = self.crepe_hop_length
+
+        self._ensure_crepe()
+        with torch.inference_mode():
+            f0, periodicity = self.torchcrepe.predict(
+                bass_mono.to(self.device),
+                sr,
+                hop_length,
+                fmin=self.fmin,
+                fmax=self.fmax,
+                model="full",
+                batch_size=128,
+                return_periodicity=True,
+                device=self.device,
+            )
+
+        pitches = f0[0].cpu().numpy()
+        periodicity = periodicity[0].cpu().numpy()
+        pitches[pitches <= 0] = np.nan
+
+        events = frames_to_events(pitches, periodicity, hop_length, sr, min_conf=0.4, merge_gap_s=0.08)
+        return events_to_pretty_midi(events)
 
 
 def frames_to_events(
@@ -80,99 +201,61 @@ def frames_to_events(
     conf: np.ndarray,
     hop_length: int,
     sr: int,
-    min_conf: float = 0.15,
-    merge_gap_s: float = 0.12,
-):
-    events = []
+    min_conf: float,
+    merge_gap_s: float,
+) -> List[Tuple[float, float, int]]:
+    events: List[Tuple[float, float, int]] = []
     active = False
-    cur_start = None
-    cur_midi = None
+    cur_start = 0.0
+    cur_midi = 0
 
-    for i, (p, c) in enumerate(zip(pitches_hz, conf)):
-        t = i * hop_length / sr
-        voiced = (not np.isnan(p)) and (c >= min_conf)
+    for i, (pitch_hz, confidence) in enumerate(zip(pitches_hz, conf)):
+        timestamp = i * hop_length / sr
+        voiced = bool(confidence >= min_conf and not np.isnan(pitch_hz))
         if voiced:
-            midi = int(round(librosa.hz_to_midi(p)))
+            midi_note = int(round(librosa.hz_to_midi(float(pitch_hz))))
             if not active:
                 active = True
-                cur_start = t
-                cur_midi = midi
-            else:
-                if abs(cur_midi - midi) > 1:
-                    events.append((cur_start, t, cur_midi))
-                    cur_start = t
-                    cur_midi = midi
-        else:
-            if active:
-                events.append((cur_start, t, cur_midi))
-                active = False
-                cur_start = None
-                cur_midi = None
+                cur_start = timestamp
+                cur_midi = midi_note
+            elif abs(cur_midi - midi_note) > 1:
+                events.append((cur_start, timestamp, cur_midi))
+                cur_start = timestamp
+                cur_midi = midi_note
+        elif active:
+            events.append((cur_start, timestamp, cur_midi))
+            active = False
 
     if active:
-        t = len(pitches_hz) * hop_length / sr
-        events.append((cur_start, t, cur_midi))
+        timestamp = len(pitches_hz) * hop_length / sr
+        events.append((cur_start, timestamp, cur_midi))
 
-    # sloučení krátkých mezer
-    merged = []
-    for s, e, m in events:
-        if merged and s - merged[-1][1] <= merge_gap_s and merged[-1][2] == m:
-            merged[-1] = (merged[-1][0], e, m)
+    merged: List[Tuple[float, float, int]] = []
+    for start, end, midi in events:
+        if merged and start - merged[-1][1] <= merge_gap_s and merged[-1][2] == midi:
+            merged[-1] = (merged[-1][0], end, midi)
         else:
-            merged.append((s, e, m))
+            merged.append((start, end, midi))
     return merged
 
 
-def audio_wav_to_bass_midi(y: np.ndarray, sr: int) -> pretty_midi.PrettyMIDI:
-    # oříznout
-    max_samples = int(MAX_SECONDS * sr)
-    y = y[:max_samples]
-
-    # resample
-    if sr != TARGET_SR:
-        y = librosa.resample(y, orig_sr=sr, target_sr=TARGET_SR)
-        sr = TARGET_SR
-
-    # band-pass
-    y_bp = bandpass(y, sr)
-
-    # pitch
-    hop_length = 512
-    pitches = librosa.yin(
-        y_bp,
-        fmin=librosa.note_to_hz("C1"),
-        fmax=librosa.note_to_hz("C5"),
-        sr=sr,
-        frame_length=2048,
-        hop_length=hop_length,
-    )
-
-    # confidence
-    S = np.abs(librosa.stft(y_bp, n_fft=2048, hop_length=hop_length))
-    rms = librosa.feature.rms(S=S)[0]
-    conf = (rms - rms.min()) / (rms.max() - rms.min() + 1e-9)
-
-    events = frames_to_events(pitches, conf, hop_length, sr)
-
-    # MIDI
+def events_to_pretty_midi(events: List[Tuple[float, float, int]]) -> pretty_midi.PrettyMIDI:
     pm = pretty_midi.PrettyMIDI()
-    instr = pretty_midi.Instrument(program=33)  # Acoustic Bass
+    instrument = pretty_midi.Instrument(program=33)
     for start, end, midi_note in events:
-        instr.notes.append(
+        duration = max(end - start, 0.05)
+        instrument.notes.append(
             pretty_midi.Note(
                 velocity=100,
                 pitch=int(midi_note),
                 start=float(start),
-                end=float(max(end, start + 0.05)),
+                end=float(start + duration),
             )
         )
-    pm.instruments.append(instr)
+    pm.instruments.append(instrument)
     return pm
 
 
-# ---------------------------------------------------------
-# MIDI -> jen nejnižší linka
-# ---------------------------------------------------------
 def midi_bytes_to_bassline(midi_bytes: bytes) -> bytes:
     mid = mido.MidiFile(file=io.BytesIO(midi_bytes))
     notes = midi_to_note_intervals(mid)
@@ -183,8 +266,8 @@ def midi_bytes_to_bassline(midi_bytes: bytes) -> bytes:
     return buf.getvalue()
 
 
-def midi_to_note_intervals(mid: mido.MidiFile) -> List[Dict]:
-    notes: List[Dict] = []
+def midi_to_note_intervals(mid: mido.MidiFile) -> List[Dict[str, Any]]:
+    notes: List[Dict[str, Any]] = []
     active: Dict[Tuple[int, int, int], Tuple[int, int]] = {}
 
     for ti, track in enumerate(mid.tracks):
@@ -210,7 +293,6 @@ def midi_to_note_intervals(mid: mido.MidiFile) -> List[Dict]:
                         }
                     )
 
-    # ukončit otevřené
     if active:
         max_time = 0
         for track in mid.tracks:
@@ -233,14 +315,14 @@ def midi_to_note_intervals(mid: mido.MidiFile) -> List[Dict]:
     return notes
 
 
-def pick_lowest_line(notes: List[Dict]) -> List[Dict]:
+def pick_lowest_line(notes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     if not notes:
         return []
 
     change_points = sorted({n["start"] for n in notes} | {n["end"] for n in notes})
-    active: List[Dict] = []
-    bass_notes: List[Dict] = []
-    current_bass = None
+    active: List[Dict[str, Any]] = []
+    bass_notes: List[Dict[str, Any]] = []
+    current_bass: Dict[str, Any] | None = None
     i = 0
 
     for t in change_points:
@@ -276,7 +358,7 @@ def pick_lowest_line(notes: List[Dict]) -> List[Dict]:
     return bass_notes
 
 
-def notes_to_midi(bass_notes: List[Dict], ticks_per_beat: int) -> mido.MidiFile:
+def notes_to_midi(bass_notes: List[Dict[str, Any]], ticks_per_beat: int) -> mido.MidiFile:
     mid_out = mido.MidiFile(ticks_per_beat=ticks_per_beat)
     track = mido.MidiTrack()
     mid_out.tracks.append(track)
@@ -304,30 +386,85 @@ def notes_to_midi(bass_notes: List[Dict], ticks_per_beat: int) -> mido.MidiFile:
     return mid_out
 
 
-# ---------------------------------------------------------
-# Warmup
-# ---------------------------------------------------------
-@app.on_event("startup")
-async def warmup():
+PIPELINE: BaseBassTranscriber | None = None
+
+
+def get_pipeline() -> BaseBassTranscriber:
+    global PIPELINE
+    if PIPELINE is None:
+        if SCANBASS_MODE == "heavy":
+            try:
+                PIPELINE = HeavyBassTranscriber()
+            except Exception as exc:
+                print(f"⚠️  Falling back to light pipeline: {exc}")
+                PIPELINE = LightBassTranscriber()
+        else:
+            PIPELINE = LightBassTranscriber()
+    return PIPELINE
+
+
+@app.get("/")
+async def root():
+    pipeline = get_pipeline()
+    return {"ok": True, "message": "scanbass backend online", "jobs": len(JOBS), "mode": pipeline.name}
+
+
+@app.head("/")
+async def root_head():
+    return JSONResponse(content={"ok": True})
+
+
+def load_audio_bytes(data: bytes, filename: str) -> Tuple[np.ndarray, int]:
     try:
-        sr = TARGET_SR
-        y = np.zeros(sr, dtype=np.float32)
-        _ = audio_wav_to_bass_midi(y, sr)
-        print("✅ warmup done")
-    except Exception as e:
-        print("❌ warmup failed:", e)
+        y, sr = sf.read(io.BytesIO(data), dtype="float32")
+        if y.ndim > 1:
+            y = y.mean(axis=1)
+        return y.astype(np.float32), int(sr)
+    except Exception:
+        pass
+
+    try:
+        import torchaudio
+    except ImportError as exc:
+        raise ValueError("Audio decoding failed and torchaudio is not available.") from exc
+
+    buffer = io.BytesIO(data)
+    buffer.seek(0)
+    waveform, sr = torchaudio.load(buffer)
+    if waveform.size(0) > 1:
+        waveform = waveform.mean(dim=0, keepdim=True)
+    y = waveform.squeeze(0).numpy().astype(np.float32)
+    return y, int(sr)
 
 
-# ---------------------------------------------------------
-# API
-# ---------------------------------------------------------
+def prepare_audio(data: bytes, filename: str) -> Tuple[np.ndarray, int]:
+    y, sr = load_audio_bytes(data, filename)
+    if y.ndim != 1:
+        y = np.asarray(y, dtype=np.float32).reshape(-1)
+    max_samples = int(MAX_SECONDS * sr)
+    if y.shape[0] > max_samples:
+        y = y[:max_samples]
+    if not np.any(np.isfinite(y)):
+        raise ValueError("Audio file contains no usable samples.")
+    return y.astype(np.float32), sr
+
+
+@app.on_event("startup")
+async def warmup() -> None:
+    try:
+        pipeline = get_pipeline()
+        pipeline.warmup()
+        print(f"✅ warmup done ({pipeline.name} mode)")
+    except Exception as exc:
+        print(f"❌ warmup failed: {exc}")
+
+
 @app.post("/jobs")
 async def create_job(file: UploadFile = File(...)):
     filename_lower = (file.filename or "").lower()
     original_name = file.filename or "input"
 
     data = await file.read()
-
     job_id = str(uuid.uuid4())
     JOBS[job_id] = {
         "status": "processing",
@@ -340,12 +477,11 @@ async def create_job(file: UploadFile = File(...)):
         if filename_lower.endswith((".mid", ".midi")):
             result_bytes = midi_bytes_to_bassline(data)
         else:
-            if not filename_lower.endswith(".wav"):
-                raise ValueError("Only .wav is supported in this MVP version.")
-            y, sr = sf.read(io.BytesIO(data))
-            if y.ndim > 1:
-                y = y.mean(axis=1)
-            pm = audio_wav_to_bass_midi(y, sr)
+            if not filename_lower.endswith((".wav", ".mp3", ".flac", ".ogg")):
+                raise ValueError("Only .wav or .mp3 audio is supported.")
+            y, sr = prepare_audio(data, filename_lower)
+            pipeline = get_pipeline()
+            pm = pipeline.audio_to_midi(y, sr)
             buf = io.BytesIO()
             pm.write(buf)
             result_bytes = buf.getvalue()
@@ -372,11 +508,9 @@ async def get_job(job_id: str):
     if job["status"] == "error":
         return {"job_id": job_id, "status": "error", "error": job["error"]}
 
-    # hotovo -> vrátíme přímo soubor jako stream
     result_bytes: bytes = job["result"]
     original_name: str = job.get("original_name") or "output"
 
-    # sundat příponu, aby název byl hezký
     if "." in original_name:
         original_name = original_name.rsplit(".", 1)[0]
 
@@ -385,7 +519,5 @@ async def get_job(job_id: str):
     return StreamingResponse(
         io.BytesIO(result_bytes),
         media_type="audio/midi",
-        headers={
-            "Content-Disposition": f'attachment; filename="{download_name}"'
-        },
+        headers={"Content-Disposition": f'attachment; filename="{download_name}"'},
     )
