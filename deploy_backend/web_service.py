@@ -1,6 +1,6 @@
+﻿from __future__ import annotations
 """FastAPI wrapper exposing ScanBass modes as an HTTP service (Render-friendly)."""
 
-from __future__ import annotations
 
 import asyncio
 import logging
@@ -20,7 +20,7 @@ from starlette.background import BackgroundTask
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-# Render nám dá PORT z env. Lokálně necháme 8000.
+# Render nĂˇm dĂˇ PORT z env. LokĂˇlnÄ› nechĂˇme 8000.
 DEFAULT_HOST = os.getenv("SCANBASS_HOST", "0.0.0.0")
 DEFAULT_PORT = int(os.getenv("PORT", os.getenv("SCANBASS_PORT", "8000")))
 
@@ -51,7 +51,7 @@ app = FastAPI(
     version="0.3.0",
 )
 
-# CORS – ať ti to frontend na Renderu / jiném hostingu hned bere
+# CORS â€“ aĹĄ ti to frontend na Renderu / jinĂ©m hostingu hned bere
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -75,7 +75,7 @@ def _save_upload(upload: UploadFile) -> Path:
 
 
 def _make_job_id(input_name: str, mode: str) -> str:
-    # uděláme kratší ID, ale bez mezer – Render měl problém s názvem v URL
+    # udÄ›lĂˇme kratĹˇĂ­ ID, ale bez mezer â€“ Render mÄ›l problĂ©m s nĂˇzvem v URL
     stem = Path(input_name).stem or "input"
     safe_stem = "".join(c for c in stem if c.isalnum() or c in ("-", "_"))[:32]
     return f"{safe_stem}-{mode}-{uuid.uuid4().hex[:8]}"
@@ -89,9 +89,9 @@ def _job_output_dir(job_id: str) -> Path:
 
 async def _run_mode(mode: str, audio_path: Path, out_dir: Path, **params):
     """
-    DŮLEŽITÉ:
-    - importujeme až TADY → takže start uvicornu je rychlý
-    - tohle je celý důvod, proč Render předtím neviděl port
+    DĹ®LEĹ˝ITĂ‰:
+    - importujeme aĹľ TADY â†’ takĹľe start uvicornu je rychlĂ˝
+    - tohle je celĂ˝ dĹŻvod, proÄŤ Render pĹ™edtĂ­m nevidÄ›l port
     """
     if mode == "bass":
         from modes.bass_mode import run_bass_mode  # lazy import
@@ -163,13 +163,13 @@ async def _execute_job(
     async with JOB_LOCK:
         job.status = "succeeded"
         job.output_dir = str(out_dir)
-        # pokud mód vrátí dict → uložíme
+        # pokud mĂłd vrĂˇtĂ­ dict â†’ uloĹľĂ­me
         job.artifacts = {k: str(v) for k, v in (artifacts or {}).items()}
 
 
 @app.get("/health")
 async def health_check():
-    # Renderu stačí, že tohle odpoví → uvidí port
+    # Renderu staÄŤĂ­, Ĺľe tohle odpovĂ­ â†’ uvidĂ­ port
     return {"status": "ok"}
 
 
@@ -229,7 +229,7 @@ async def download_results(job_id: str):
     if not base_dir.exists():
         raise HTTPException(status_code=404, detail="Job output missing")
 
-    # tady máš pořád ZIP, frontend si z něj může vytáhnout bassline.mid
+    # tady mĂˇĹˇ poĹ™Ăˇd ZIP, frontend si z nÄ›j mĹŻĹľe vytĂˇhnout bassline.mid
     temp_dir = Path(tempfile.mkdtemp(prefix="scanbass_zip_"))
     base_name = temp_dir / job_id
     archive_path = shutil.make_archive(str(base_name), "zip", root_dir=base_dir)
