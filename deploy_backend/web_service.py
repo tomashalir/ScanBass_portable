@@ -1,3 +1,12 @@
+import sys
+from pathlib import Path
+
+# --- make sure Render sees our src/ folder ---
+BASE_DIR = Path(__file__).resolve().parent
+SRC_DIR = BASE_DIR / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
 """FastAPI wrapper exposing ScanBass modes as an HTTP service."""
 
 from __future__ import annotations
@@ -29,8 +38,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 
-from modes.bass_mode import run_bass_mode
-from modes.poly_mode import run_poly_mode
+from src.modes.bass_mode import run_bass_mode
+from src.modes.poly_mode import run_poly_mode
 
 logger = logging.getLogger(__name__)
 
@@ -230,3 +239,7 @@ if __name__ == "__main__":
     host = os.getenv("SCANBASS_HOST", "0.0.0.0")
     port = int(os.getenv("SCANBASS_PORT") or os.getenv("PORT") or "8000")
     uvicorn.run(app, host=host, port=port, reload=False)
+
+@app.get("/healthz")
+def healthz():
+    return {"status": "ok"}
