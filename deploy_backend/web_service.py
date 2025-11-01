@@ -2,11 +2,12 @@ from __future__ import annotations
 
 """
 FastAPI wrapper exposing ScanBass modes as an HTTP service.
-This version is Render-friendly:
-- future import is at the very top
-- no heavy imports at module import time
-- binds to os.environ["PORT"] (Render) or 8000 locally
-- lazy-loads modes inside _run_mode()
+
+Render-friendly:
+- future import je úplně nahoře
+- těžké věci (demucs / TF) se natahují až při spuštění jobu
+- port se bere z os.environ["PORT"] (Render) nebo 8000 lokálně
+- upload se OŘÍZNE na prvních 30 s, aby to nesežralo moc RAM
 """
 
 import sys
@@ -27,7 +28,7 @@ from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 
 # -----------------------------------------------------------------------------
-# make sure Render sees our src/ folder
+# zajistíme, že uvidíme složku src/ i na Renderu
 # -----------------------------------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parent
 SRC_DIR = BASE_DIR / "src"
@@ -36,23 +37,28 @@ if str(SRC_DIR) not in sys.path:
 
 logger = logging.getLogger(__name__)
 
-# maximum amount of audio (in seconds) that the backend will process per job
+# zpracujeme max 30 s, aby se to na Hobby instanci neudusilo
 MAX_UPLOAD_DURATION_SECONDS = 30.0
 
 
 class UnsupportedAudioError(Exception):
     """Raised when a trimming strategy cannot decode the uploaded audio."""
 
-# Render gives us PORT; locally we can leave 8000.
+
+# -----------------------------------------------------------------------------
+# port & výstupní složka
+# -----------------------------------------------------------------------------
 PORT_ENV = os.getenv("PORT")
 if PORT_ENV and "SCANBASS_PORT" not in os.environ:
     os.environ["SCANBASS_PORT"] = PORT_ENV
 
-# where to store job outputs
 DEFAULT_OUTPUT_ROOT = Path(os.getenv("SCANBASS_OUTPUT_ROOT", "outputs")).resolve()
 DEFAULT_OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
 
 
+# -----------------------------------------------------------------------------
+# model jobu
+# -----------------------------------------------------------------------------
 @dataclass
 class JobState:
     job_id: str
@@ -89,6 +95,18 @@ JOB_LOCK = asyncio.Lock()
 JOBS: Dict[str, JobState] = {}
 
 
+@app.get("/", tags=["service"])
+async def read_root() -> Dict[str, str]:
+    """Simple landing endpoint for browsers and uptime checks."""
+    return {
+        "service": "ScanBass backend",
+        "message": "Submit audio via POST /jobs. See /health for status.",
+    }
+
+
+# -----------------------------------------------------------------------------
+# uložení a ořezání uploadu
+# -----------------------------------------------------------------------------
 def _save_upload(upload: UploadFile) -> Path:
     suffix = Path(upload.filename or "input.wav").suffix or ".wav"
     temp_dir = Path(tempfile.mkdtemp(prefix="scanbass_"))
@@ -100,8 +118,12 @@ def _save_upload(upload: UploadFile) -> Path:
 
 
 def _enforce_max_duration(audio_path: Path, max_seconds: float) -> Path:
-    """Trim an uploaded audio file to the first ``max_seconds`` seconds."""
+    """
+    Trim an uploaded audio file to the first ``max_seconds`` seconds.
 
+    Preferujeme soundfile (rychlé, přímo v Pythonu). Když selže nebo neumí
+    formát → spadne do ffmpeg.
+    """
     if max_seconds <= 0:
         return audio_path
 
@@ -115,7 +137,7 @@ def _enforce_max_duration(audio_path: Path, max_seconds: float) -> Path:
 def _trim_with_soundfile(audio_path: Path, max_seconds: float) -> Path:
     try:
         import soundfile as sf  # type: ignore
-    except Exception as exc:  # pragma: no cover - dependency missing
+    except Exception as exc:  # soundfile chybí → zkus ffmpeg
         raise UnsupportedAudioError from exc
 
     try:
@@ -123,7 +145,7 @@ def _trim_with_soundfile(audio_path: Path, max_seconds: float) -> Path:
             samplerate = sound_file.samplerate
             total_frames = len(sound_file)
             if total_frames == 0:
-                raise HTTPException(status_code=400, detail="Uploaded audio is empty")
+                raise UnsupportedAudioError("empty audio")
 
             max_frames = int(max_seconds * samplerate)
             needs_trim = total_frames > max_frames
@@ -131,14 +153,14 @@ def _trim_with_soundfile(audio_path: Path, max_seconds: float) -> Path:
 
             sound_file.seek(0)
             data = sound_file.read(frames=frames_to_read)
-    except HTTPException:
-        raise
     except Exception as exc:
+        # cokoliv se nepovedlo → přenecháme ffmpeg
         raise UnsupportedAudioError from exc
 
     if not needs_trim:
         return audio_path
 
+    # když už řežeme, chceme formát, který umíme zapsat
     safe_suffixes = {".wav", ".flac", ".ogg", ".oga", ".aiff", ".aif", ".aifc"}
     suffix = audio_path.suffix.lower()
     target_path = audio_path
@@ -147,8 +169,8 @@ def _trim_with_soundfile(audio_path: Path, max_seconds: float) -> Path:
 
     try:
         sf.write(str(target_path), data, samplerate)
-    except Exception as exc:  # pragma: no cover - disk write failure
-        raise HTTPException(status_code=500, detail="Failed to store trimmed audio") from exc
+    except Exception as exc:
+        raise UnsupportedAudioError from exc
 
     if target_path != audio_path:
         try:
@@ -156,31 +178,23 @@ def _trim_with_soundfile(audio_path: Path, max_seconds: float) -> Path:
         except OSError:
             pass
 
-    actual_duration = frames_to_read / float(samplerate)
-    logger.info(
-        "Trimmed uploaded audio to %.2f seconds (original: %.2f seconds)",
-        actual_duration,
-        total_frames / float(samplerate),
-    )
-
     return target_path
 
 
 def _trim_with_ffmpeg(audio_path: Path, max_seconds: float) -> Path:
+    """Fallback trimming přes ffmpeg."""
     try:
         import audioread  # type: ignore
-    except Exception as exc:  # pragma: no cover - dependency missing
+    except Exception as exc:
         raise HTTPException(status_code=500, detail="Audio backend unavailable") from exc
 
     try:
         with audioread.audio_open(str(audio_path)) as reader:
             duration = reader.duration
-    except HTTPException:
-        raise
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Could not read uploaded audio") from exc
 
-    if duration is None or duration <= 0:
+    if not duration or duration <= 0:
         raise HTTPException(status_code=400, detail="Uploaded audio is empty")
 
     if duration <= max_seconds:
@@ -189,6 +203,7 @@ def _trim_with_ffmpeg(audio_path: Path, max_seconds: float) -> Path:
     suffix = audio_path.suffix or ""
     temp_copy_path = audio_path.with_name(audio_path.stem + "_trimmed" + suffix)
 
+    # 1) zkusíme copy
     if suffix:
         if _run_ffmpeg_trim(audio_path, temp_copy_path, max_seconds, copy_codec=True):
             try:
@@ -196,13 +211,9 @@ def _trim_with_ffmpeg(audio_path: Path, max_seconds: float) -> Path:
             except OSError:
                 pass
             temp_copy_path.replace(audio_path)
-            logger.info(
-                "Trimmed uploaded audio from %.2f to %.2f seconds using ffmpeg (copy)",
-                duration,
-                max_seconds,
-            )
             return audio_path
 
+    # 2) fallback → WAV
     temp_wav_path = audio_path.with_name(audio_path.stem + "_trimmed.wav")
     if _run_ffmpeg_trim(audio_path, temp_wav_path, max_seconds, copy_codec=False):
         try:
@@ -218,11 +229,6 @@ def _trim_with_ffmpeg(audio_path: Path, max_seconds: float) -> Path:
             temp_wav_path.replace(final_path)
         else:
             final_path = temp_wav_path
-        logger.info(
-            "Trimmed uploaded audio from %.2f to %.2f seconds using ffmpeg (re-encode)",
-            duration,
-            max_seconds,
-        )
         return final_path
 
     raise HTTPException(status_code=500, detail="Failed to trim uploaded audio")
@@ -268,14 +274,12 @@ def _run_ffmpeg_trim(
             pass
         return False
 
-    logger.debug(
-        "ffmpeg trim succeeded for %s (copy=%s)",
-        source,
-        copy_codec,
-    )
     return True
 
 
+# -----------------------------------------------------------------------------
+# job spouštění
+# -----------------------------------------------------------------------------
 def _make_job_id(input_name: str, mode: str) -> str:
     stem = Path(input_name).stem or "input"
     return f"{stem}_{mode}_{uuid.uuid4().hex[:8]}"
@@ -394,6 +398,9 @@ async def _execute_job(
         job.artifacts = {k: str(v) for k, v in (artifacts or {}).items()}
 
 
+# -----------------------------------------------------------------------------
+# endpoints
+# -----------------------------------------------------------------------------
 @app.get("/health")
 @app.get("/healthz")
 async def health():
@@ -482,6 +489,9 @@ async def download_results(job_id: str):
     return FileResponse(archive_path, filename=f"{job_id}.zip", background=background)
 
 
+# -----------------------------------------------------------------------------
+# lokální spuštění
+# -----------------------------------------------------------------------------
 if __name__ == "__main__":
     import uvicorn
 
