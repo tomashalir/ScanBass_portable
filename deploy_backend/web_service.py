@@ -43,6 +43,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")
+async def root():
+    return {"ok": True, "message": "scanbass online"}
+
+@app.head("/")
+async def root_head():
+    return JSONResponse(content={"ok": True})
+
 # in-memory "databáze"
 JOBS: Dict[str, Dict[str, Any]] = {}
 
