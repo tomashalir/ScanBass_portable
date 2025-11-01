@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Start FastAPI backend for ScanBass
+set -e
 
-set -euo pipefail
+# Render dává PORT do env, lokálně to bude 8000
+HOST=0.0.0.0
+PORT=${PORT:-8000}
 
-PORT_VALUE=${PORT:-8000}
+exec uvicorn web_service:app --host "$HOST" --port "$PORT"
 
-exec python -m uvicorn deploy_backend.web_service:app --host 0.0.0.0 --port ${PORT:-8000}
 

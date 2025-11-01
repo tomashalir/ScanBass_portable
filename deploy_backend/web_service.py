@@ -1,261 +1,249 @@
 from __future__ import annotations
 
 """
-FastAPI wrapper exposing ScanBass modes as an HTTP service.
-This version is Render-friendly:
-- future import is at the very top
-- no heavy imports at module import time
-- binds to os.environ["PORT"] (Render) or 8000 locally
-- lazy-loads modes inside _run_mode()
+Ultra-light ScanBass backend
+
+- žádný torch / TF / demucs
+- jen: vezmi MIDI → vytáhni nejnižší noty → vrať nový MIDI
+- vhodné pro Render 512 MB
 """
 
-import sys
-import os
-import asyncio
-import logging
-import shutil
-import tempfile
-import uuid
-from dataclasses import dataclass, field, asdict as dataclass_asdict
-from pathlib import Path
-from typing import Dict, Literal, Optional
+import io
+from typing import List, Tuple, Dict
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from starlette.background import BackgroundTask
+from fastapi.responses import StreamingResponse
 
-# -----------------------------------------------------------------------------
-# make sure Render sees our src/ folder
-# -----------------------------------------------------------------------------
-BASE_DIR = Path(__file__).resolve().parent
-SRC_DIR = BASE_DIR / "src"
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
-
-logger = logging.getLogger(__name__)
-
-# Render gives us PORT; locally we can leave 8000.
-PORT_ENV = os.getenv("PORT")
-if PORT_ENV and "SCANBASS_PORT" not in os.environ:
-    os.environ["SCANBASS_PORT"] = PORT_ENV
-
-# where to store job outputs
-DEFAULT_OUTPUT_ROOT = Path(os.getenv("SCANBASS_OUTPUT_ROOT", "outputs")).resolve()
-DEFAULT_OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+import mido
 
 
-@dataclass
-class JobState:
-    job_id: str
-    mode: Literal["bass", "poly"]
-    input_name: str
-    status: Literal["queued", "running", "succeeded", "failed"] = "queued"
-    output_dir: Optional[str] = None
-    artifacts: Optional[Dict[str, str]] = field(default_factory=dict)
-    error: Optional[str] = None
+app = FastAPI(title="ScanBass (slim MIDI backend)")
 
-    def to_dict(self) -> Dict[str, object]:
-        data = dataclass_asdict(self)
-        if data["artifacts"] is None:
-            data["artifacts"] = {}
-        return data
-
-
-app = FastAPI(
-    title="ScanBass Online",
-    description="Submit audio, get MIDI. Bass or poly.",
-    version="0.2.1",
-)
-
-# CORS – kvůli tvému frontend/index.html
+# Pokud voláš z jiné domény (landing page), povolíme CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=["*"],   # klidně si to později zpřísni
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-JOB_LOCK = asyncio.Lock()
-JOBS: Dict[str, JobState] = {}
+
+@app.get("/status")
+async def status():
+    return {"ok": True, "message": "ScanBass MIDI-only backend is running"}
 
 
-def _save_upload(upload: UploadFile) -> Path:
-    suffix = Path(upload.filename or "input.wav").suffix or ".wav"
-    temp_dir = Path(tempfile.mkdtemp(prefix="scanbass_"))
-    temp_path = temp_dir / f"upload{suffix}"
-    with temp_path.open("wb") as f:
-        shutil.copyfileobj(upload.file, f)
-    upload.file.close()
-    return temp_path
+# ---------------------------------------------------------------------------
+# Pomocné funkce pro práci s MIDI
+# ---------------------------------------------------------------------------
+
+def _midi_to_note_intervals(mid: mido.MidiFile) -> List[Dict]:
+    """
+    Převedeme všechny NOTE_ON / NOTE_OFF napříč všemi tracky
+    do jedné ploché časové struktury = seznam not
+    ve tvaru:
+        {
+          "start": abs_time_ticks,
+          "end": abs_time_ticks,
+          "note": pitch,
+          "velocity": vel,
+          "channel": ch
+        }
+    """
+    notes: List[Dict] = []
+
+    # klíč: (track_idx, channel, note) -> start_time, velocity
+    active: Dict[Tuple[int, int, int], Tuple[int, int]] = {}
+
+    for ti, track in enumerate(mid.tracks):
+        abs_time = 0
+        for msg in track:
+            abs_time += msg.time  # delta -> absolute
+            if msg.type == "note_on" and msg.velocity > 0:
+                key = (ti, msg.channel if hasattr(msg, "channel") else 0, msg.note)
+                active[key] = (abs_time, msg.velocity)
+            elif (msg.type == "note_off") or (msg.type == "note_on" and msg.velocity == 0):
+                key = (ti, msg.channel if hasattr(msg, "channel") else 0, msg.note)
+                if key in active:
+                    start_time, vel = active.pop(key)
+                    notes.append(
+                        {
+                            "start": start_time,
+                            "end": abs_time,
+                            "note": msg.note,
+                            "velocity": vel,
+                            "channel": key[1],
+                        }
+                    )
+
+    # některé noty můžou zůstat "otevřené" → zavřeme je na konci souboru
+    if active:
+        # vezmeme největší čas, co jsme kde měli
+        max_time = 0
+        for track in mid.tracks:
+            t = 0
+            for msg in track:
+                t += msg.time
+            max_time = max(max_time, t)
+
+        for (ti, ch, n), (start_time, vel) in active.items():
+            notes.append(
+                {
+                    "start": start_time,
+                    "end": max_time,
+                    "note": n,
+                    "velocity": vel,
+                    "channel": ch,
+                }
+            )
+
+    # seřadíme podle začátku
+    notes.sort(key=lambda x: (x["start"], x["note"]))
+    return notes
 
 
-def _make_job_id(input_name: str, mode: str) -> str:
-    stem = Path(input_name).stem or "input"
-    return f"{stem}_{mode}_{uuid.uuid4().hex[:8]}"
+def _pick_lowest_line(notes: List[Dict]) -> List[Dict]:
+    """
+    Vezmeme ze všech not vždy tu *nejnižší*, která běžela v daném čase.
+    Děláme to hodně jednoduše, aby to bylo levné.
+    """
+    if not notes:
+        return []
+
+    # uděláme z toho "časové body", kde se něco mění
+    change_points = sorted({n["start"] for n in notes} | {n["end"] for n in notes})
+
+    bass_notes: List[Dict] = []
+
+    active: List[Dict] = []
+    current_bass = None  # právě hrající basová nota
+
+    i = 0  # index do notes
+
+    for t in change_points:
+        # přidej všechny noty, které v tomto čase začínají
+        while i < len(notes) and notes[i]["start"] == t:
+            active.append(notes[i])
+            i += 1
+
+        # odeber všechny noty, které v tomto čase končí
+        active = [n for n in active if n["end"] != t]
+
+        # vyber nejnižší
+        if active:
+            lowest = min(active, key=lambda x: x["note"])
+            if current_bass is None or lowest["note"] != current_bass["note"]:
+                # ukonči předchozí basu
+                if current_bass is not None:
+                    current_bass["end"] = t
+                    bass_notes.append(current_bass)
+                # začni novou
+                current_bass = {
+                    "start": t,
+                    "end": None,  # doplníme později
+                    "note": lowest["note"],
+                    "velocity": lowest["velocity"],
+                    "channel": lowest["channel"],
+                }
+        else:
+            # nic nehraje – ukonči basu
+            if current_bass is not None:
+                current_bass["end"] = t
+                bass_notes.append(current_bass)
+                current_bass = None
+
+    # závěr – pokud ještě něco hraje, ukončíme na posledním čase
+    if current_bass is not None:
+        current_bass["end"] = change_points[-1] + 1
+        bass_notes.append(current_bass)
+
+    return bass_notes
 
 
-def _job_output_dir(job_id: str) -> Path:
-    out_dir = DEFAULT_OUTPUT_ROOT / job_id
-    out_dir.mkdir(parents=True, exist_ok=True)
-    return out_dir
+def _notes_to_midi(bass_notes: List[Dict], ticks_per_beat: int) -> mido.MidiFile:
+    """
+    Z vybraných basových not uděláme single-track MIDI.
+    """
+    mid_out = mido.MidiFile(ticks_per_beat=ticks_per_beat)
+    track = mido.MidiTrack()
+    mid_out.tracks.append(track)
+
+    # budeme psát v absolutních časech a pak převádět na delty
+    events: List[Tuple[int, mido.Message]] = []
+
+    for n in bass_notes:
+        start = int(n["start"])
+        end = int(n["end"])
+        note = int(n["note"])
+        vel = int(n["velocity"])
+        ch = int(n["channel"])
+
+        events.append((start, mido.Message("note_on", note=note, velocity=vel, channel=ch, time=0)))
+        events.append((end, mido.Message("note_off", note=note, velocity=0, channel=ch, time=0)))
+
+    events.sort(key=lambda x: x[0])
+
+    last_time = 0
+    for abs_time, msg in events:
+        delta = abs_time - last_time
+        msg.time = delta
+        track.append(msg)
+        last_time = abs_time
+
+    # na konec End of Track
+    track.append(mido.MetaMessage("end_of_track", time=0))
+
+    return mid_out
 
 
-async def _run_mode(mode: str, audio_path: Path, out_dir: Path, **params):
-    # LAZY IMPORTS – tady se teprve tahají těžké věci
-    if mode == "bass":
-        from src.modes.bass_mode import run_bass_mode  # type: ignore
+# ---------------------------------------------------------------------------
+# API endpoint
+# ---------------------------------------------------------------------------
 
-        return await asyncio.to_thread(
-            run_bass_mode,
-            str(audio_path),
-            str(out_dir),
-            voicing_threshold=float(params.get("voicing_threshold", 0.5)),
-        )
+@app.post("/extract-bass")
+async def extract_bass(file: UploadFile = File(...)):
+    """
+    Přijme .mid nebo .midi a vrátí nový MIDI soubor jen s nejnižší linkou.
+    """
+    filename = file.filename or "input.mid"
+    if not filename.lower().endswith((".mid", ".midi")):
+        raise HTTPException(status_code=400, detail="Please upload a .mid/.midi file")
 
-    if mode == "poly":
-        from src.modes.poly_mode import run_poly_mode  # type: ignore
-
-        return await asyncio.to_thread(
-            run_poly_mode,
-            str(audio_path),
-            str(out_dir),
-            frame_hz=int(params.get("frame_hz", 40)),
-            min_note_len_ms=int(params.get("min_note_len_ms", 90)),
-            gap_merge_ms=int(params.get("gap_merge_ms", 60)),
-        )
-
-    raise HTTPException(status_code=400, detail=f"Unsupported mode: {mode}")
-
-
-async def _get_job(job_id: str) -> JobState:
-    async with JOB_LOCK:
-        job = JOBS.get(job_id)
-        if job is None:
-            raise HTTPException(status_code=404, detail="Unknown job ID")
-        return job
-
-
-async def _execute_job(
-    job: JobState,
-    saved_path: Path,
-    *,
-    voicing_threshold: float,
-    frame_hz: int,
-    min_note_len_ms: int,
-    gap_merge_ms: int,
-):
-    async with JOB_LOCK:
-        job.status = "running"
-
-    out_dir = _job_output_dir(job.job_id)
-    params = dict(
-        voicing_threshold=voicing_threshold,
-        frame_hz=frame_hz,
-        min_note_len_ms=min_note_len_ms,
-        gap_merge_ms=gap_merge_ms,
-    )
+    data = await file.read()
 
     try:
-        artifacts = await _run_mode(job.mode, saved_path, out_dir, **params)
+        mid = mido.MidiFile(file=io.BytesIO(data))
     except Exception as exc:
-        logger.exception("ScanBass job failed")
-        async with JOB_LOCK:
-            job.status = "failed"
-            job.output_dir = str(out_dir)
-            job.error = str(exc)
-            job.artifacts = {}
-        return
-    finally:
-        try:
-            shutil.rmtree(saved_path.parent)
-        except OSError:
-            pass
+        raise HTTPException(status_code=400, detail=f"Cannot read MIDI: {exc!r}")
 
-    async with JOB_LOCK:
-        job.status = "succeeded"
-        job.output_dir = str(out_dir)
-        job.artifacts = {k: str(v) for k, v in (artifacts or {}).items()}
+    notes = _midi_to_note_intervals(mid)
+    bass_notes = _pick_lowest_line(notes)
 
-
-@app.get("/health")
-@app.get("/healthz")
-async def health():
-    return {"status": "ok"}
-
-
-@app.post("/jobs")
-async def submit_job(
-    file: UploadFile = File(...),
-    mode: str = Form(...),
-    voicing_threshold: float = Form(0.5),
-    frame_hz: int = Form(40),
-    min_note_len_ms: int = Form(90),
-    gap_merge_ms: int = Form(60),
-):
-    mode_normalized = mode.lower().strip()
-    if mode_normalized not in {"bass", "poly"}:
-        raise HTTPException(status_code=400, detail="mode must be 'bass' or 'poly'")
-
-    saved_path = _save_upload(file)
-    job_id = _make_job_id(file.filename or saved_path.stem, mode_normalized)
-    job = JobState(
-        job_id=job_id,
-        mode=mode_normalized,
-        input_name=file.filename or saved_path.name,
-    )
-
-    async with JOB_LOCK:
-        JOBS[job_id] = job
-
-    asyncio.create_task(
-        _execute_job(
-            job,
-            saved_path,
-            voicing_threshold=voicing_threshold,
-            frame_hz=frame_hz,
-            min_note_len_ms=min_note_len_ms,
-            gap_merge_ms=gap_merge_ms,
+    # když tam nic nebylo
+    if not bass_notes:
+        # vrátíme prázdné MIDI se stejným ticks_per_beat
+        empty_mid = mido.MidiFile(ticks_per_beat=mid.ticks_per_beat)
+        empty_track = mido.MidiTrack()
+        empty_track.append(mido.MetaMessage("end_of_track", time=0))
+        empty_mid.tracks.append(empty_track)
+        out_bytes = io.BytesIO()
+        empty_mid.save(file=out_bytes)
+        out_bytes.seek(0)
+        return StreamingResponse(
+            out_bytes,
+            media_type="audio/midi",
+            headers={"Content-Disposition": 'attachment; filename="bassline.mid"'},
         )
+
+    out_mid = _notes_to_midi(bass_notes, ticks_per_beat=mid.ticks_per_beat)
+    buf = io.BytesIO()
+    out_mid.save(file=buf)
+    buf.seek(0)
+
+    return StreamingResponse(
+        buf,
+        media_type="audio/midi",
+        headers={"Content-Disposition": 'attachment; filename="bassline.mid"'},
     )
-
-    return {"job_id": job_id, "status": job.status}
-
-
-@app.get("/jobs")
-async def list_jobs():
-    async with JOB_LOCK:
-        return {job_id: job.to_dict() for job_id, job in JOBS.items()}
-
-
-@app.get("/jobs/{job_id}")
-async def job_status(job_id: str):
-    job = await _get_job(job_id)
-    return job.to_dict()
-
-
-@app.get("/jobs/{job_id}/download")
-async def download_results(job_id: str):
-    job = await _get_job(job_id)
-    if job.status != "succeeded" or not job.output_dir:
-        raise HTTPException(status_code=409, detail="Job not finished yet")
-
-    base_dir = Path(job.output_dir)
-    if not base_dir.exists():
-        raise HTTPException(status_code=404, detail="Job output missing")
-
-    tmp_dir = Path(tempfile.mkdtemp(prefix="scanbass_zip_"))
-    base_name = tmp_dir / job_id
-    archive_path = shutil.make_archive(str(base_name), "zip", root_dir=base_dir)
-
-    background = BackgroundTask(lambda: shutil.rmtree(tmp_dir, ignore_errors=True))
-    return FileResponse(archive_path, filename=f"{job_id}.zip", background=background)
-
-
-if __name__ == "__main__":
-    import uvicorn
-
-    host = os.getenv("SCANBASS_HOST", "0.0.0.0")
-    port = int(os.getenv("SCANBASS_PORT") or os.getenv("PORT") or "8000")
-    uvicorn.run(app, host=host, port=port, reload=False)
