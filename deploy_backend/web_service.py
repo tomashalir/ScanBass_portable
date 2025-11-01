@@ -1,10 +1,14 @@
-﻿from __future__ import annotations
-"""FastAPI wrapper exposing ScanBass modes as an HTTP service (Render-friendly)."""
+from __future__ import annotations
 
+"""
+FastAPI wrapper exposing ScanBass modes as an HTTP service.
+Compatible with local run and Render (PORT env).
+"""
 
+import sys
+import os
 import asyncio
 import logging
-import os
 import shutil
 import tempfile
 import uuid
@@ -12,24 +16,55 @@ from dataclasses import dataclass, field, asdict as dataclass_asdict
 from pathlib import Path
 from typing import Dict, Literal, Optional
 
+# -----------------------------------------------------------------------------
+# Make sure we can import from both:
+# - project root (deploy_backend, modes, etc.)
+# - src/ (where your modes live on Render)
+# -----------------------------------------------------------------------------
+BASE_DIR = Path(__file__).resolve().parent   # .../deploy_backend
+PROJECT_ROOT = BASE_DIR.parent               # .../ (repo root)
+SRC_DIR = PROJECT_ROOT / "src"
+
+# add .../deploy_backend
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+
+# add .../src
+if SRC_DIR.exists() and str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
+# -----------------------------------------------------------------------------
+# Imports that need the adjusted sys.path
+# -----------------------------------------------------------------------------
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+from src.modes.bass_mode import run_bass_mode
+from src.modes.poly_mode import run_poly_mode
 
-# Render nĂˇm dĂˇ PORT z env. LokĂˇlnÄ› nechĂˇme 8000.
-DEFAULT_HOST = os.getenv("SCANBASS_HOST", "0.0.0.0")
-DEFAULT_PORT = int(os.getenv("PORT", os.getenv("SCANBASS_PORT", "8000")))
+# -----------------------------------------------------------------------------
+# Logging / output dir
+# -----------------------------------------------------------------------------
+logger = logging.getLogger(__name__)
 
 DEFAULT_OUTPUT_ROOT = Path(os.getenv("SCANBASS_OUTPUT_ROOT", "outputs")).resolve()
 DEFAULT_OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
 
+# If Render gives us PORT, mirror it to SCANBASS_PORT so __main__ uses it
+PORT_ENV = os.getenv("PORT")
+if PORT_ENV and "SCANBASS_PORT" not in os.environ:
+    os.environ["SCANBASS_PORT"] = PORT_ENV
 
+
+# -----------------------------------------------------------------------------
+# Job state
+# -----------------------------------------------------------------------------
 @dataclass
 class JobState:
+    """Track ScanBass processing jobs for asynchronous clients."""
+
     job_id: str
     mode: Literal["bass", "poly"]
     input_name: str
@@ -47,11 +82,14 @@ class JobState:
 
 app = FastAPI(
     title="ScanBass Online",
-    description="HTTP API for ScanBass. Submit audio and poll for MIDI outputs.",
-    version="0.3.0",
+    description=(
+        "HTTP API for ScanBass. Submit audio to the bass or poly transcription "
+        "pipelines and poll for MIDI outputs."
+    ),
+    version="0.2.0",
 )
 
-# CORS â€“ aĹĄ ti to frontend na Renderu / jinĂ©m hostingu hned bere
+# allow frontend on Render / localhost
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -64,6 +102,9 @@ JOB_LOCK = asyncio.Lock()
 JOBS: Dict[str, JobState] = {}
 
 
+# -----------------------------------------------------------------------------
+# Helpers
+# -----------------------------------------------------------------------------
 def _save_upload(upload: UploadFile) -> Path:
     suffix = Path(upload.filename or "input.wav").suffix or ".wav"
     temp_dir = Path(tempfile.mkdtemp(prefix="scanbass_"))
@@ -75,10 +116,8 @@ def _save_upload(upload: UploadFile) -> Path:
 
 
 def _make_job_id(input_name: str, mode: str) -> str:
-    # udÄ›lĂˇme kratĹˇĂ­ ID, ale bez mezer â€“ Render mÄ›l problĂ©m s nĂˇzvem v URL
     stem = Path(input_name).stem or "input"
-    safe_stem = "".join(c for c in stem if c.isalnum() or c in ("-", "_"))[:32]
-    return f"{safe_stem}-{mode}-{uuid.uuid4().hex[:8]}"
+    return f"{stem}_{mode}_{uuid.uuid4().hex[:8]}"
 
 
 def _job_output_dir(job_id: str) -> Path:
@@ -88,22 +127,14 @@ def _job_output_dir(job_id: str) -> Path:
 
 
 async def _run_mode(mode: str, audio_path: Path, out_dir: Path, **params):
-    """
-    DĹ®LEĹ˝ITĂ‰:
-    - importujeme aĹľ TADY â†’ takĹľe start uvicornu je rychlĂ˝
-    - tohle je celĂ˝ dĹŻvod, proÄŤ Render pĹ™edtĂ­m nevidÄ›l port
-    """
     if mode == "bass":
-        from modes.bass_mode import run_bass_mode  # lazy import
         return await asyncio.to_thread(
             run_bass_mode,
             str(audio_path),
             str(out_dir),
             voicing_threshold=float(params.get("voicing_threshold", 0.5)),
         )
-
     if mode == "poly":
-        from modes.poly_mode import run_poly_mode  # lazy import
         return await asyncio.to_thread(
             run_poly_mode,
             str(audio_path),
@@ -112,7 +143,6 @@ async def _run_mode(mode: str, audio_path: Path, out_dir: Path, **params):
             min_note_len_ms=int(params.get("min_note_len_ms", 90)),
             gap_merge_ms=int(params.get("gap_merge_ms", 60)),
         )
-
     raise ValueError(f"Unsupported mode: {mode}")
 
 
@@ -133,6 +163,7 @@ async def _execute_job(
     min_note_len_ms: int,
     gap_merge_ms: int,
 ):
+    # mark running
     async with JOB_LOCK:
         job.status = "running"
 
@@ -146,7 +177,7 @@ async def _execute_job(
 
     try:
         artifacts = await _run_mode(job.mode, saved_path, out_dir, **params)
-    except Exception as exc:  # pragma: no cover
+    except Exception as exc:
         logger.exception("ScanBass job failed")
         async with JOB_LOCK:
             job.status = "failed"
@@ -155,21 +186,29 @@ async def _execute_job(
             job.artifacts = {}
         return
     finally:
+        # cleanup temp upload
         try:
             shutil.rmtree(saved_path.parent)
         except OSError:
             pass
 
+    # success
     async with JOB_LOCK:
         job.status = "succeeded"
         job.output_dir = str(out_dir)
-        # pokud mĂłd vrĂˇtĂ­ dict â†’ uloĹľĂ­me
-        job.artifacts = {k: str(v) for k, v in (artifacts or {}).items()}
+        job.artifacts = {key: str(value) for key, value in (artifacts or {}).items()}
 
 
+# -----------------------------------------------------------------------------
+# Routes
+# -----------------------------------------------------------------------------
 @app.get("/health")
 async def health_check():
-    # Renderu staÄŤĂ­, Ĺľe tohle odpovĂ­ â†’ uvidĂ­ port
+    return {"status": "ok"}
+
+
+@app.get("/healthz")
+def healthz():
     return {"status": "ok"}
 
 
@@ -177,10 +216,10 @@ async def health_check():
 async def submit_job(
     file: UploadFile = File(...),
     mode: str = Form(..., description="Processing mode: bass or poly"),
-    voicing_threshold: float = Form(0.5),
-    frame_hz: int = Form(40),
-    min_note_len_ms: int = Form(90),
-    gap_merge_ms: int = Form(60),
+    voicing_threshold: float = Form(0.5, description="Bass mode voicing threshold"),
+    frame_hz: int = Form(40, description="Poly mode frame rate"),
+    min_note_len_ms: int = Form(90, description="Poly mode minimum note length"),
+    gap_merge_ms: int = Form(60, description="Poly mode gap merge threshold"),
 ):
     mode_normalized = mode.lower().strip()
     if mode_normalized not in {"bass", "poly"}:
@@ -193,6 +232,7 @@ async def submit_job(
     async with JOB_LOCK:
         JOBS[job_id] = job
 
+    # background job
     asyncio.create_task(
         _execute_job(
             job,
@@ -229,7 +269,7 @@ async def download_results(job_id: str):
     if not base_dir.exists():
         raise HTTPException(status_code=404, detail="Job output missing")
 
-    # tady mĂˇĹˇ poĹ™Ăˇd ZIP, frontend si z nÄ›j mĹŻĹľe vytĂˇhnout bassline.mid
+    # pack result dir into zip so frontend can download single file
     temp_dir = Path(tempfile.mkdtemp(prefix="scanbass_zip_"))
     base_name = temp_dir / job_id
     archive_path = shutil.make_archive(str(base_name), "zip", root_dir=base_dir)
@@ -238,12 +278,12 @@ async def download_results(job_id: str):
     return FileResponse(archive_path, filename=f"{job_id}.zip", background=background)
 
 
+# -----------------------------------------------------------------------------
+# Local run
+# -----------------------------------------------------------------------------
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(
-        "deploy_backend.src.web_service:app",
-        host=DEFAULT_HOST,
-        port=DEFAULT_PORT,
-        reload=False,
-    )
+    host = os.getenv("SCANBASS_HOST", "0.0.0.0")
+    port = int(os.getenv("SCANBASS_PORT") or os.getenv("PORT") or "8000")
+    uvicorn.run(app, host=host, port=port, reload=False)
