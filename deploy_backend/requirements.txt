@@ -1,4 +1,9 @@
 fastapi
 uvicorn[standard]
-mido
 python-multipart
+numpy
+scipy
+soundfile
+librosa==0.10.1
+pretty_midi
+mido
