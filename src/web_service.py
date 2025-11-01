@@ -14,6 +14,10 @@ if str(ROOT) not in sys.path:
 import asyncio
 import logging
 import os
+
+PORT_ENV = os.getenv("PORT")
+if PORT_ENV and "SCANBASS_PORT" not in os.environ:
+    os.environ["SCANBASS_PORT"] = PORT_ENV
 import shutil
 import tempfile
 import uuid
@@ -32,6 +36,31 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_OUTPUT_ROOT = Path(os.getenv("SCANBASS_OUTPUT_ROOT", "outputs")).resolve()
 DEFAULT_OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+
+def _resolve_bind_port() -> int:
+    """Return the TCP port ScanBass should bind to."""
+
+    port_sources = (
+        ("SCANBASS_PORT", os.getenv("SCANBASS_PORT")),
+        ("PORT", os.getenv("PORT")),
+    )
+
+    for name, raw_value in port_sources:
+        if not raw_value:
+            continue
+
+        try:
+            port = int(raw_value)
+        except ValueError as exc:
+            raise RuntimeError(f"{name} must be an integer (received {raw_value!r})") from exc
+
+        if not (0 < port < 65536):
+            raise RuntimeError(f"{name} must be between 1 and 65535 (received {port})")
+
+        return port
+
+    # Default for unmanaged environments; Render will always provide PORT.
+    return 10000
 
 @dataclass
 class JobState:
@@ -224,5 +253,6 @@ if __name__ == "__main__":
     import uvicorn
 
     host = os.getenv("SCANBASS_HOST", "0.0.0.0")
-    port = int(os.getenv("SCANBASS_PORT", "8000"))
-    uvicorn.run("src.web_service:app", host=host, port=port, reload=False)
+    port = _resolve_bind_port()
+    logger.info("Starting ScanBass API on %s:%s", host, port)
+    uvicorn.run(app, host=host, port=port, reload=False)
