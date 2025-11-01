@@ -100,6 +100,8 @@ async def _run_mode(mode: str, audio_path: Path, out_dir: Path, **params):
             str(audio_path),
             str(out_dir),
             voicing_threshold=float(params.get("voicing_threshold", 0.5)),
+            segment_seconds=float(params.get("segment_seconds", 15.0)),
+            overlap=float(params.get("segment_overlap", 0.1)),
         )
     if mode == "poly":
         return await asyncio.to_thread(
@@ -124,6 +126,8 @@ async def _execute_job(
     saved_path: Path,
     *,
     voicing_threshold: float,
+    segment_seconds: float,
+    segment_overlap: float,
     frame_hz: int,
     min_note_len_ms: int,
     gap_merge_ms: int,
@@ -134,6 +138,8 @@ async def _execute_job(
     out_dir = _job_output_dir(job.job_id)
     params = dict(
         voicing_threshold=voicing_threshold,
+        segment_seconds=segment_seconds,
+        segment_overlap=segment_overlap,
         frame_hz=frame_hz,
         min_note_len_ms=min_note_len_ms,
         gap_merge_ms=gap_merge_ms,
@@ -169,6 +175,8 @@ async def submit_job(
     file: UploadFile = File(...),
     mode: str = Form(..., description="Processing mode: bass or poly"),
     voicing_threshold: float = Form(0.5, description="Bass mode voicing threshold"),
+    segment_seconds: float = Form(15.0, description="Bass mode Demucs segment length"),
+    segment_overlap: float = Form(0.1, description="Bass mode Demucs segment overlap"),
     frame_hz: int = Form(40, description="Poly mode frame rate"),
     min_note_len_ms: int = Form(90, description="Poly mode minimum note length"),
     gap_merge_ms: int = Form(60, description="Poly mode gap merge threshold"),
@@ -189,6 +197,8 @@ async def submit_job(
             job,
             saved_path,
             voicing_threshold=voicing_threshold,
+            segment_seconds=segment_seconds,
+            segment_overlap=segment_overlap,
             frame_hz=frame_hz,
             min_note_len_ms=min_note_len_ms,
             gap_merge_ms=gap_merge_ms,
