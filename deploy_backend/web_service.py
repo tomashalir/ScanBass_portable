@@ -14,7 +14,7 @@ import pretty_midi
 import soundfile as sf
 from fastapi import File, FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse, FileResponse
 
 MAX_SECONDS = 30.0
 LIGHT_TARGET_SR = 16000
@@ -32,6 +32,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# in-memory "DB"
 JOBS: Dict[str, Dict[str, Any]] = {}
 
 
@@ -119,7 +120,6 @@ class HeavyBassTranscriber(BaseBassTranscriber):
         silence = np.zeros(int(self.crepe_sample_rate), dtype=np.float32)
         self.audio_to_midi(silence, self.crepe_sample_rate)
 
-    # Lazy init helpers -------------------------------------------------
     def _ensure_demucs(self) -> None:
         if self._demucs_model is None:
             model = self.demucs_get_model("htdemucs")
@@ -130,12 +130,10 @@ class HeavyBassTranscriber(BaseBassTranscriber):
     def _ensure_crepe(self) -> None:
         if not self._crepe_loaded:
             device_str = str(self.device)
-            # robustní varianta – jen keyword `device=...`
             self.torchcrepe.load.model(device=device_str, capacity="full")
             self._crepe_device = device_str
             self._crepe_loaded = True
 
-    # Processing --------------------------------------------------------
     def audio_to_midi(self, y: np.ndarray, sr: int) -> pretty_midi.PrettyMIDI:
         torch = self.torch
         torchaudio = self.torchaudio
@@ -165,7 +163,6 @@ class HeavyBassTranscriber(BaseBassTranscriber):
         with torch.inference_mode():
             separated = self.demucs_apply_model(self._demucs_model, demucs_inp, progress=False)
 
-        # separated: (batch, sources, channels, time)
         separated = separated[0]
         bass_index = self._demucs_model.sources.index("bass")
         bass = separated[bass_index]
@@ -430,7 +427,7 @@ def load_audio_bytes(data: bytes, filename: str) -> Tuple[np.ndarray, int]:
     try:
         import torchaudio
     except ImportError as exc:
-            raise ValueError("Audio decoding failed and torchaudio is not available.") from exc
+        raise ValueError("Audio decoding failed and torchaudio is not available.") from exc
 
     buffer = io.BytesIO(data)
     buffer.seek(0)
@@ -511,15 +508,42 @@ async def create_job(file: UploadFile = File(...)):
 
 @app.get("/jobs/{job_id}")
 async def get_job(job_id: str):
+    """
+    ALWAYS return JSON, so the frontend can safely do res.json().
+    If job is done, include download_url.
+    """
     job = JOBS.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
+    base_payload = {
+        "job_id": job_id,
+        "status": job["status"],
+    }
+
     if job["status"] == "processing":
-        return {"job_id": job_id, "status": "processing"}
+        return base_payload
 
     if job["status"] == "error":
-        return {"job_id": job_id, "status": "error", "error": job["error"]}
+        base_payload["error"] = job["error"]
+        return base_payload
+
+    # done
+    base_payload["download_url"] = f"/jobs/{job_id}/result"
+    return base_payload
+
+
+@app.get("/jobs/{job_id}/result")
+async def get_job_result(job_id: str):
+    """
+    Separate endpoint that actually streams the MIDI file.
+    """
+    job = JOBS.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job["status"] != "done":
+        raise HTTPException(status_code=409, detail="Job not finished yet")
 
     result_bytes: bytes = job["result"]
     original_name: str = job.get("original_name") or "output"
