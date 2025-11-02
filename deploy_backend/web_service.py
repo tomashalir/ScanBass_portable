@@ -130,11 +130,7 @@ class HeavyBassTranscriber(BaseBassTranscriber):
     def _ensure_crepe(self) -> None:
         if not self._crepe_loaded:
             device_str = str(self.device)
-            # torchcrepe.load.model(device=..., capacity=...) avoids double binding the
-            # ``device`` parameter. Earlier versions passed ``device`` positionally and
-            # again by keyword, triggering ``multiple values for argument 'device'`` when
-            # torchcrepe reused the loader. Keeping it keyword-only ensures compatibility
-            # with both torchcrepe.load and the internal torchcrepe.infer cache.
+            # robustní varianta – jen keyword `device=...`
             self.torchcrepe.load.model(device=device_str, capacity="full")
             self._crepe_device = device_str
             self._crepe_loaded = True
@@ -434,7 +430,7 @@ def load_audio_bytes(data: bytes, filename: str) -> Tuple[np.ndarray, int]:
     try:
         import torchaudio
     except ImportError as exc:
-        raise ValueError("Audio decoding failed and torchaudio is not available.") from exc
+            raise ValueError("Audio decoding failed and torchaudio is not available.") from exc
 
     buffer = io.BytesIO(data)
     buffer.seek(0)
