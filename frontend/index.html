@@ -338,7 +338,7 @@
         </p>
         <form id="uploadForm" class="flex flex-col gap-4">
           <label id="dropzone" for="fileInput" class="flex flex-col gap-3 p-5 text-sm text-slate-100/85 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300/60">
-            <input type="file" id="fileInput" accept=".wav,.mid,.midi" />
+            <input type="file" id="fileInput" accept=".wav,.mp3,.flac,.ogg,.mid,.midi" />
             <div id="dropLabel" class="flex items-center gap-3 text-base text-slate-100/90">
               <span class="text-xl">🎵</span>
               <span>Drag &amp; drop or click to upload</span>
@@ -394,327 +394,332 @@
     </div>
   </main>
 
+
   <script>
-    const API_BASE = "https://scanbass-backend.onrender.com";
-    const LIMIT_SECONDS = 30;
-    const form = document.getElementById("uploadForm");
-    const dropzone = document.getElementById("dropzone");
-    const fileInput = document.getElementById("fileInput");
-    const processBtn = document.getElementById("processBtn");
-    const loader = document.getElementById("loader");
-    const loaderText = document.getElementById("loaderText");
-    const statusDiv = document.getElementById("status");
-    const downloadCard = document.getElementById("downloadCard");
-    const midiDownload = document.getElementById("midiDownload");
-    const artifactList = document.getElementById("artifactList");
-    const downloadHint = document.getElementById("downloadHint");
+  const API_BASE = "https://scanbass-backend.onrender.com";
+  const LIMIT_SECONDS = 30;
+  const form = document.getElementById("uploadForm");
+  const dropzone = document.getElementById("dropzone");
+  const fileInput = document.getElementById("fileInput");
+  const processBtn = document.getElementById("processBtn");
+  const loader = document.getElementById("loader");
+  const loaderText = document.getElementById("loaderText");
+  const statusDiv = document.getElementById("status");
+  const downloadCard = document.getElementById("downloadCard");
+  const midiDownload = document.getElementById("midiDownload");
+  const artifactList = document.getElementById("artifactList");
+  const downloadHint = document.getElementById("downloadHint");
 
-    let currentDownloadUrl = null;
-    let lastUploadedName = null;
-    let currentPollAbort = null;
+  let currentDownloadUrl = null;
+  let lastUploadedName = null;
+  let currentPollAbort = null;
 
-    const statusBadge = document.createElement("span");
-    statusBadge.className = "badge";
+  const statusBadge = document.createElement("span");
+  statusBadge.className = "badge";
 
-    function setStatus(message, badge = "") {
-      statusDiv.textContent = "";
-      if (!message) {
-        return;
-      }
-      if (badge) {
-        statusBadge.textContent = badge;
-        const clone = statusBadge.cloneNode(true);
-        statusDiv.appendChild(clone);
-      }
-      statusDiv.append(message);
+  function setStatus(message, badge = "") {
+    statusDiv.textContent = "";
+    if (!message) return;
+
+    if (badge) {
+      statusBadge.textContent = badge;
+      const clone = statusBadge.cloneNode(true);
+      statusDiv.appendChild(clone);
     }
+    statusDiv.append(message);
+  }
 
-    function updateLoaderMessage(message) {
-      if (message) {
-        loaderText.textContent = message;
-      }
+  function updateLoaderMessage(message) {
+    if (message) {
+      loaderText.textContent = message;
     }
+  }
 
-    function showLoader(message) {
-      updateLoaderMessage(message);
-      loader.classList.remove("hidden");
+  function showLoader(message) {
+    updateLoaderMessage(message);
+    loader.classList.remove("hidden");
+  }
+
+  function hideLoader() {
+    loader.classList.add("hidden");
+  }
+
+  function resetDownloadCard() {
+    if (currentDownloadUrl) {
+      URL.revokeObjectURL(currentDownloadUrl);
+      currentDownloadUrl = null;
     }
+    midiDownload.innerHTML = "";
+    downloadCard.classList.add("hidden");
+    artifactList.innerHTML = "";
+    artifactList.classList.add("hidden");
+    downloadHint?.classList.remove("hidden");
+  }
 
-    function hideLoader() {
-      loader.classList.add("hidden");
+  function describeDownload(name) {
+    return (name || "").toLowerCase().endsWith(".zip")
+      ? "ZIP includes trimmed clip, isolated bass, and MIDI"
+      : "DAW-ready MIDI";
+  }
+
+  function renderArtifacts(artifacts) {
+    // nový backend teď artefakty neposílá – prostě to skryjeme
+    artifactList.innerHTML = "";
+    artifactList.classList.add("hidden");
+  }
+
+  function showDownload(blob, downloadName, artifacts) {
+    if (currentDownloadUrl) {
+      URL.revokeObjectURL(currentDownloadUrl);
     }
+    const url = URL.createObjectURL(blob);
+    currentDownloadUrl = url;
+    const name = downloadName || "scanbass.mid";
+    midiDownload.innerHTML = `
+      <a class="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-cyan-200 transition hover:bg-white/15"
+         href="${url}" download="${name}" draggable="true">
+        ⬇️ Download / drag to DAW
+      </a>
+      <span class="block pt-2 text-[0.7rem] text-slate-300/75">${describeDownload(name)}</span>
+    `;
+    downloadHint?.classList.add("hidden");
+    downloadCard.classList.remove("hidden");
+    renderArtifacts(artifacts);
+  }
 
-    function resetDownloadCard() {
-      if (currentDownloadUrl) {
-        URL.revokeObjectURL(currentDownloadUrl);
-        currentDownloadUrl = null;
-      }
-      midiDownload.innerHTML = "";
-      downloadCard.classList.add("hidden");
-      artifactList.innerHTML = "";
-      artifactList.classList.add("hidden");
-      downloadHint?.classList.remove("hidden");
+  function fallbackDownloadName(jobId, originalName) {
+    if (originalName) {
+      const dot = originalName.lastIndexOf(".");
+      const base = dot > -1 ? originalName.slice(0, dot) : originalName;
+      return `${base || "scanbass"}.mid`;
     }
+    return `scanbass-${jobId}.mid`;
+  }
 
-    function describeDownload(name) {
-      return (name || "").toLowerCase().endsWith(".zip")
-        ? "ZIP includes trimmed clip, isolated bass, and MIDI"
-        : "DAW-ready MIDI";
-    }
-
-    function renderArtifacts(artifacts) {
-      if (!artifacts || typeof artifacts !== "object") {
-        artifactList.innerHTML = "";
-        artifactList.classList.add("hidden");
-        return;
-      }
-      const entries = Object.entries(artifacts);
-      if (!entries.length) {
-        artifactList.innerHTML = "";
-        artifactList.classList.add("hidden");
-        return;
-      }
-      artifactList.innerHTML = entries
-        .map(([key, value]) => {
-          const label = key.replace(/_/g, " ");
-          const file = (value || "").split(/[\\/]/).pop();
-          return `<li><span>${label}</span><code>${file || "…"}</code></li>`;
-        })
-        .join("");
-      artifactList.classList.remove("hidden");
-    }
-
-    function showDownload(blob, downloadName, artifacts) {
-      if (currentDownloadUrl) {
-        URL.revokeObjectURL(currentDownloadUrl);
-      }
-      const url = URL.createObjectURL(blob);
-      currentDownloadUrl = url;
-      const name = downloadName || "scanbass.mid";
-      midiDownload.innerHTML = `<a class="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-cyan-200 transition hover:bg-white/15" href="${url}" download="${name}" draggable="true">⬇️ Download / drag to DAW</a><span class="block pt-2 text-[0.7rem] text-slate-300/75">${describeDownload(name)}</span>`;
-      downloadHint?.classList.add("hidden");
-      downloadCard.classList.remove("hidden");
-      renderArtifacts(artifacts);
-    }
-
-    function fallbackDownloadName(jobId, originalName) {
-      if (originalName) {
-        const dot = originalName.lastIndexOf('.');
-        const base = dot > -1 ? originalName.slice(0, dot) : originalName;
-        return `${base || "scanbass"}.mid`;
-      }
-      return `scanbass-${jobId}.mid`;
-    }
-
-    function extractFileName(response, jobId, originalName) {
-      const header = response.headers.get("Content-Disposition") || "";
-      let match = header.match(/filename\*=UTF-8''([^;\s]+)/i);
-      if (match && match[1]) {
-        try {
-          return decodeURIComponent(match[1]);
-        } catch (_) {
-          return match[1];
-        }
-      }
-      match = header.match(/filename="?([^";]+)"?/i);
-      if (match && match[1]) {
+  function extractFileName(response, jobId, originalName) {
+    const header = response.headers.get("Content-Disposition") || "";
+    let match = header.match(/filename\*=UTF-8''([^;\s]+)/i);
+    if (match && match[1]) {
+      try {
+        return decodeURIComponent(match[1]);
+      } catch {
         return match[1];
       }
-      return fallbackDownloadName(jobId, originalName);
     }
+    match = header.match(/filename="?([^";]+)"?/i);
+    if (match && match[1]) {
+      return match[1];
+    }
+    return fallbackDownloadName(jobId, originalName);
+  }
 
-    function delay(ms, signal) {
-      return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => {
-          signal?.removeEventListener("abort", onAbort);
-          resolve();
-        }, ms);
+  function delay(ms, signal) {
+    return new Promise((resolve, reject) => {
+      const t = setTimeout(() => {
+        signal?.removeEventListener("abort", onAbort);
+        resolve();
+      }, ms);
 
-        function onAbort() {
-          clearTimeout(timer);
-          signal?.removeEventListener("abort", onAbort);
-          reject(new DOMException("Aborted", "AbortError"));
-        }
+      function onAbort() {
+        clearTimeout(t);
+        reject(new DOMException("Aborted", "AbortError"));
+      }
 
-        if (signal) {
-          if (signal.aborted) {
-            onAbort();
-            return;
-          }
-          signal.addEventListener("abort", onAbort, { once: true });
-        }
-      }).catch(err => {
-        if (err.name === "AbortError") {
+      if (signal) {
+        if (signal.aborted) {
+          onAbort();
           return;
         }
-        throw err;
-      });
-    }
+        signal.addEventListener("abort", onAbort, { once: true });
+      }
+    }).catch(err => {
+      if (err.name === "AbortError") return;
+      throw err;
+    });
+  }
 
-    async function pollJob(jobId) {
-      cancelPolling();
-      const abort = new AbortController();
-      currentPollAbort = abort;
+  async function pollJob(jobId) {
+    cancelPolling();
+    const abort = new AbortController();
+    currentPollAbort = abort;
 
-      try {
-        while (!abort.signal.aborted) {
-          const resp = await fetch(`${API_BASE}/jobs/${encodeURIComponent(jobId)}`, {
-            signal: abort.signal,
-            headers: { Accept: "application/json" }
-          });
-          if (!resp.ok) {
-            throw new Error(`Status ${resp.status}`);
-          }
+    try {
+      while (!abort.signal.aborted) {
+        const resp = await fetch(`${API_BASE}/jobs/${encodeURIComponent(jobId)}`, {
+          headers: { Accept: "application/json" },
+          signal: abort.signal,
+        });
 
-          const job = await resp.json();
+        if (!resp.ok) {
+          throw new Error(`Status ${resp.status}`);
+        }
 
-          if (job.status === "queued") {
-            showLoader(`Preparing ${LIMIT_SECONDS} s clip at 44.1 kHz…`);
-            setStatus("Queued — trimming upload for analysis.", "⏳");
-          } else if (job.status === "running") {
-            showLoader("Isolating bass and transcribing MIDI…");
-            setStatus("Transcribing bassline…", "●");
-          } else if (job.status === "failed") {
-            hideLoader();
-            setStatus(`Failed: ${job.error || "unknown error"}`, "✖");
-            processBtn.disabled = false;
-            break;
-          } else if (job.status === "succeeded") {
-            await finalizeJob(jobId, job);
-            break;
-          } else {
-            setStatus(`Status: ${job.status}`, "ℹ️");
-          }
+        // NOVÉ: backend VŽDY vrací JSON
+        const job = await resp.json();
 
+        // 1) pořád zpracovává
+        if (job.status === "processing") {
+          showLoader(`Processing ${LIMIT_SECONDS} s clip…`);
+          setStatus("Transcribing bassline…", "●");
           await delay(1500, abort.signal);
-        }
-      } catch (error) {
-        if (abort.signal.aborted) {
-          return;
-        }
-        console.error(error);
-        hideLoader();
-        setStatus(`Error while polling job: ${error.message}`, "!");
-        processBtn.disabled = false;
-      } finally {
-        if (currentPollAbort === abort) {
-          currentPollAbort = null;
-        }
-      }
-    }
-
-    async function finalizeJob(jobId, job) {
-      showLoader("Packaging bassline and MIDI…");
-      setStatus("Packaging outputs…", "⬇️");
-      try {
-        const resp = await fetch(`${API_BASE}/jobs/${encodeURIComponent(jobId)}/download`);
-        if (!resp.ok) {
-          throw new Error(`Download failed (${resp.status})`);
-        }
-        const blob = await resp.blob();
-        const name = extractFileName(resp, jobId, lastUploadedName);
-        showDownload(blob, name, job.artifacts);
-        setStatus("Bassline MIDI ready to download.", "⬇️");
-      } catch (error) {
-        console.error(error);
-        setStatus(`Could not download results: ${error.message}`, "!");
-      } finally {
-        hideLoader();
-        processBtn.disabled = false;
-      }
-    }
-
-    ["dragenter", "dragover", "dragleave", "drop"].forEach(eventName => {
-      dropzone.addEventListener(eventName, event => {
-        event.preventDefault();
-        event.stopPropagation();
-      });
-    });
-
-    ["dragenter", "dragover"].forEach(eventName => {
-      dropzone.addEventListener(eventName, () => dropzone.classList.add("active"));
-    });
-
-    ["dragleave", "drop"].forEach(eventName => {
-      dropzone.addEventListener(eventName, () => dropzone.classList.remove("active"));
-    });
-
-    dropzone.addEventListener("drop", event => {
-      const file = event.dataTransfer?.files?.[0];
-      if (file) {
-        fileInput.files = event.dataTransfer.files;
-        lastUploadedName = file.name;
-        updateDropLabel(file.name);
-      }
-    });
-
-    fileInput.addEventListener("change", () => {
-      if (fileInput.files.length > 0) {
-        const name = fileInput.files[0].name;
-        lastUploadedName = name;
-        updateDropLabel(name);
-      }
-    });
-
-    function updateDropLabel(filename) {
-      const label = document.getElementById("dropLabel");
-      label.innerHTML = `<span class="text-xl">✅</span><span>${filename}</span>`;
-      setStatus(`Only the first ${LIMIT_SECONDS} seconds will be analyzed.`, "ℹ️");
-    }
-
-    form.addEventListener("submit", async event => {
-      event.preventDefault();
-      const file = fileInput.files[0];
-      if (!file) {
-        setStatus("Please select a file.", "!");
-        return;
-      }
-
-      processBtn.disabled = true;
-      showLoader("Uploading clip…");
-      setStatus("Uploading trimmed clip…", "↑");
-      resetDownloadCard();
-      cancelPolling();
-
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("mode", "poly");
-
-      try {
-        const resp = await fetch(`${API_BASE}/jobs`, { method: "POST", body: fd });
-        if (!resp.ok) {
-          const detail = await resp.text();
-          throw new Error(detail || `HTTP ${resp.status}`);
-        }
-        const data = await resp.json();
-        if (!data.job_id) {
-          throw new Error("Missing job id from backend");
+          continue;
         }
 
-        showLoader(`Preparing ${LIMIT_SECONDS} s clip at 44.1 kHz…`);
-        setStatus("Queued — trimming upload for analysis.", "⏳");
-        pollJob(data.job_id);
-      } catch (error) {
-        console.error(error);
-        hideLoader();
-        setStatus(`Error: ${error.message}`, "!");
-        processBtn.disabled = false;
-      }
-    });
+        // 2) chyba
+        if (job.status === "error") {
+          hideLoader();
+          setStatus(`Error: ${job.error || "unknown error"}`, "✖");
+          processBtn.disabled = false;
+          break;
+        }
 
-    function cancelPolling() {
-      if (currentPollAbort) {
-        currentPollAbort.abort();
+        // 3) hotovo
+        if (job.status === "done") {
+          const downloadUrl = job.download_url;
+          await finalizeJob(jobId, downloadUrl);
+          break;
+        }
+
+        // fallback
+        setStatus(`Status: ${job.status}`, "ℹ️");
+        await delay(1500, abort.signal);
+      }
+    } catch (err) {
+      if (abort.signal.aborted) return;
+      console.error(err);
+      hideLoader();
+      setStatus(`Error while polling job: ${err.message}`, "!");
+      processBtn.disabled = false;
+    } finally {
+      if (currentPollAbort === abort) {
         currentPollAbort = null;
       }
     }
+  }
 
-    window.addEventListener("beforeunload", () => {
-      if (currentDownloadUrl) {
-        URL.revokeObjectURL(currentDownloadUrl);
+  async function finalizeJob(jobId, downloadUrlFromJob) {
+    showLoader("Packaging bassline and MIDI…");
+    setStatus("Packaging outputs…", "⬇️");
+
+    if (!downloadUrlFromJob) {
+      // nemáme download_url – jen to oznam
+      hideLoader();
+      setStatus("Job finished but no download URL was returned.", "ℹ️");
+      processBtn.disabled = false;
+      return;
+    }
+
+    try {
+      // nový endpoint: /jobs/{id}/result
+      const resp = await fetch(`${API_BASE}${downloadUrlFromJob}`);
+      if (!resp.ok) {
+        throw new Error(`Download failed (${resp.status})`);
       }
-      cancelPolling();
+      const blob = await resp.blob();
+      const name = extractFileName(resp, jobId, lastUploadedName);
+      showDownload(blob, name, null);
+      setStatus("Bassline MIDI ready to download.", "⬇️");
+    } catch (err) {
+      console.error(err);
+      setStatus(`Could not download results: ${err.message}`, "!");
+    } finally {
+      hideLoader();
+      processBtn.disabled = false;
+    }
+  }
+
+  // drag & drop
+  ["dragenter", "dragover", "dragleave", "drop"].forEach(eventName => {
+    dropzone.addEventListener(eventName, event => {
+      event.preventDefault();
+      event.stopPropagation();
     });
-  </script>
+  });
+
+  ["dragenter", "dragover"].forEach(eventName => {
+    dropzone.addEventListener(eventName, () => dropzone.classList.add("active"));
+  });
+
+  ["dragleave", "drop"].forEach(eventName => {
+    dropzone.addEventListener(eventName, () => dropzone.classList.remove("active"));
+  });
+
+  dropzone.addEventListener("drop", event => {
+    const file = event.dataTransfer?.files?.[0];
+    if (file) {
+      fileInput.files = event.dataTransfer.files;
+      lastUploadedName = file.name;
+      updateDropLabel(file.name);
+    }
+  });
+
+  fileInput.addEventListener("change", () => {
+    if (fileInput.files.length > 0) {
+      const name = fileInput.files[0].name;
+      lastUploadedName = name;
+      updateDropLabel(name);
+    }
+  });
+
+  function updateDropLabel(filename) {
+    const label = document.getElementById("dropLabel");
+    label.innerHTML = `<span class="text-xl">✅</span><span>${filename}</span>`;
+    setStatus(`Only the first ${LIMIT_SECONDS} seconds will be analyzed.`, "ℹ️");
+  }
+
+  form.addEventListener("submit", async event => {
+    event.preventDefault();
+    const file = fileInput.files[0];
+    if (!file) {
+      setStatus("Please select a file.", "!");
+      return;
+    }
+
+    processBtn.disabled = true;
+    showLoader("Uploading clip…");
+    setStatus("Uploading trimmed clip…", "↑");
+    resetDownloadCard();
+    cancelPolling();
+
+    const fd = new FormData();
+    fd.append("file", file);
+
+    try {
+      const resp = await fetch(`${API_BASE}/jobs`, { method: "POST", body: fd });
+      if (!resp.ok) {
+        const detail = await resp.text();
+        throw new Error(detail || `HTTP ${resp.status}`);
+      }
+      const data = await resp.json();
+      if (!data.job_id) {
+        throw new Error("Missing job id from backend");
+      }
+
+      showLoader(`Processing ${LIMIT_SECONDS} s clip…`);
+      setStatus("Transcribing bassline…", "⏳");
+      pollJob(data.job_id);
+    } catch (err) {
+      console.error(err);
+      hideLoader();
+      setStatus(`Error: ${err.message}`, "!");
+      processBtn.disabled = false;
+    }
+  });
+
+  function cancelPolling() {
+    if (currentPollAbort) {
+      currentPollAbort.abort();
+      currentPollAbort = null;
+    }
+  }
+
+  window.addEventListener("beforeunload", () => {
+    if (currentDownloadUrl) {
+      URL.revokeObjectURL(currentDownloadUrl);
+    }
+    cancelPolling();
+  });
+</script>
+
 </body>
 </html>
