@@ -4,667 +4,392 @@
   <meta charset="UTF-8" />
   <title>ScanBass Studio • Hyperglass</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            display: ['Space Grotesk', 'system-ui', 'sans-serif']
+          }
+        }
+      }
+    };
+  </script>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600&display=swap');
-
     :root {
-      --bg: radial-gradient(circle at 12% 20%, rgba(0, 255, 191, 0.16), rgba(2, 4, 9, 0.6) 40%),
-             radial-gradient(circle at 82% 12%, rgba(0, 157, 255, 0.12), transparent 46%),
-             radial-gradient(circle at 50% 90%, rgba(106, 29, 255, 0.18), transparent 60%),
+      --bg: radial-gradient(circle at 14% 18%, rgba(0, 255, 191, 0.18), rgba(3, 4, 10, 0.65) 42%),
+             radial-gradient(circle at 82% 12%, rgba(0, 157, 255, 0.15), transparent 46%),
+             radial-gradient(circle at 50% 92%, rgba(106, 29, 255, 0.24), transparent 60%),
              #03040a;
-      --panel-glass: rgba(8, 10, 18, 0.62);
-      --panel-border: rgba(169, 212, 255, 0.08);
-      --muted: rgba(207, 224, 255, 0.68);
-      --text: #f4f8ff;
-      --accent: #00d1ff;
-      --accent-grad: linear-gradient(120deg, #00f5ff 0%, #9b59ff 45%, #ff63d8 100%);
-      --accent-soft: rgba(0, 209, 255, 0.16);
-      --outline: rgba(255, 255, 255, 0.08);
-      --radius-xl: 28px;
       color-scheme: dark;
     }
 
-    *, *::before, *::after {
+    *,
+    *::before,
+    *::after {
       box-sizing: border-box;
     }
 
     body {
       margin: 0;
       min-height: 100vh;
-      font-family: 'Inter', sans-serif;
+      font-family: 'Inter', system-ui, sans-serif;
       background: var(--bg);
       background-attachment: fixed;
-      color: var(--text);
-      display: flex;
-      align-items: flex-start;
-      justify-content: center;
-      padding: clamp(1.6rem, 4vw, 3rem);
-      position: relative;
-      overflow-x: hidden;
+      color: #f4f8ff;
     }
 
     .nebula {
       position: fixed;
-      inset: -25vh -25vw;
+      inset: -20vh -20vw;
       pointer-events: none;
-      background: radial-gradient(circle at 20% 30%, rgba(0, 225, 255, 0.23), transparent 55%),
-                  radial-gradient(circle at 80% 20%, rgba(255, 84, 251, 0.18), transparent 55%),
-                  radial-gradient(circle at 50% 90%, rgba(45, 0, 255, 0.22), transparent 60%);
+      background: radial-gradient(circle at 20% 32%, rgba(0, 225, 255, 0.24), transparent 55%),
+                  radial-gradient(circle at 80% 18%, rgba(255, 84, 251, 0.18), transparent 55%),
+                  radial-gradient(circle at 46% 86%, rgba(45, 0, 255, 0.22), transparent 65%);
       filter: blur(120px);
-      opacity: 0.8;
+      opacity: 0.85;
       transform: scale(1.1);
       animation: drift 16s ease-in-out infinite alternate;
       z-index: 0;
-    }
-
-    @keyframes drift {
-      from { transform: scale(1.05) translate3d(-12px, -10px, 0); }
-      to { transform: scale(1.1) translate3d(12px, 8px, 0); }
     }
 
     .constellation {
       position: fixed;
       inset: 0;
       pointer-events: none;
-      background-image: radial-gradient(rgba(255,255,255,0.14) 1px, transparent 1px);
+      background-image: radial-gradient(rgba(255, 255, 255, 0.12) 1px, transparent 1px);
       background-size: 120px 120px;
-      opacity: 0.3;
-      mask-image: radial-gradient(circle at 50% 50%, rgba(0, 0, 0, 0.65), transparent 75%);
+      opacity: 0.25;
+      mask-image: radial-gradient(circle at 50% 50%, rgba(0, 0, 0, 0.72), transparent 78%);
       z-index: 0;
     }
 
-    .shell {
-      width: min(1120px, 96vw);
-      display: flex;
-      flex-direction: column;
-      gap: clamp(2rem, 4vw, 3.6rem);
-      position: relative;
-      z-index: 1;
-    }
-
-    .workflow {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: clamp(1.8rem, 3vw, 2.6rem);
-    }
-
-    .panel {
-      background: var(--panel-glass);
-      border: 1px solid var(--panel-border);
-      border-radius: var(--radius-xl);
-      backdrop-filter: blur(28px);
-      box-shadow: 0 24px 60px rgba(2, 10, 30, 0.45);
+    .glass-panel {
       position: relative;
       overflow: hidden;
+      border-radius: 28px;
+      background: rgba(8, 10, 18, 0.68);
+      border: 1px solid rgba(169, 212, 255, 0.08);
+      backdrop-filter: blur(28px);
+      box-shadow: 0 28px 80px rgba(6, 14, 32, 0.55);
+      transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+                  box-shadow 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+                  border-color 0.4s ease;
       isolation: isolate;
-      opacity: 0;
-      transform: translate3d(0, 40px, 0) scale(0.98);
-      animation: floatIn 1.05s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
-      animation-delay: var(--delay, 0s);
-      transition: transform 0.65s cubic-bezier(0.16, 1, 0.3, 1),
-                  box-shadow 0.65s cubic-bezier(0.16, 1, 0.3, 1),
-                  border-color 0.5s ease;
-      will-change: transform;
     }
 
-    .panel:hover,
-    .panel:focus-within {
-      transform: translate3d(0, -8px, 0) scale(1.01);
-      box-shadow: 0 36px 90px rgba(12, 32, 82, 0.55);
-      border-color: rgba(0, 209, 255, 0.25);
-    }
-
-    .panel::before {
+    .glass-panel::before {
       content: '';
       position: absolute;
       inset: 0;
       border-radius: inherit;
-      background: linear-gradient(140deg, rgba(255,255,255,0.08), transparent 35%);
+      background: linear-gradient(140deg, rgba(255, 255, 255, 0.1), transparent 40%);
       pointer-events: none;
       mix-blend-mode: screen;
     }
 
-    .panel::after {
+    .glass-panel::after {
       content: '';
       position: absolute;
       inset: 1px;
-      border-radius: calc(var(--radius-xl) - 1px);
-      border: 1px solid rgba(255,255,255,0.04);
+      border-radius: inherit;
+      border: 1px solid rgba(255, 255, 255, 0.05);
       pointer-events: none;
     }
 
-    @keyframes floatIn {
-      from {
-        opacity: 0;
-        transform: translate3d(0, 44px, 0) scale(0.96);
-      }
-      to {
-        opacity: 1;
-        transform: translate3d(0, 0, 0) scale(1);
-      }
-    }
-
-    @keyframes breathe {
-      0%, 100% { transform: scale(1) translate3d(0, 0, 0); }
-      50% { transform: scale(1.04) translate3d(0, -6px, 0); }
-    }
-
-    @keyframes orbit {
-      to { transform: rotate(360deg); }
-    }
-
-    @keyframes glimmer {
-      0%, 100% { opacity: 0.82; transform: scale(0.96); }
-      50% { opacity: 1; transform: scale(1.05); }
-    }
-
-    .hero {
-      grid-column: 1 / -1;
-      padding: clamp(1.9rem, 2.8vw, 2.6rem);
-      display: flex;
-      flex-wrap: wrap;
-      gap: clamp(1.6rem, 3.6vw, 3rem);
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .hero-copy {
-      flex: 1 1 320px;
-      display: flex;
-      flex-direction: column;
-      gap: clamp(1.1rem, 2.8vw, 1.6rem);
-    }
-
-    .logo-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      background: rgba(243, 247, 255, 0.02);
-      border: 1px solid rgba(244, 248, 255, 0.08);
-      border-radius: 99px;
-      padding: 0.35rem 1rem 0.35rem 0.35rem;
-      font-size: 0.68rem;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      width: fit-content;
-    }
-
-    .logo-badge span {
-      width: 24px;
-      height: 24px;
-      border-radius: 999px;
-      background: var(--accent-grad);
-    }
-
-    h1 {
-      font-family: 'Space Grotesk', system-ui, sans-serif;
-      font-size: clamp(2.2rem, 4vw, 3rem);
-      line-height: 1.02;
-      letter-spacing: -0.01em;
-      margin: 0;
-    }
-
-    .tagline {
-      margin: 0;
-      font-size: 1rem;
-      line-height: 1.6;
-      color: var(--muted);
-      max-width: 32rem;
-    }
-
-    .hero-points {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 0.55rem;
-    }
-
-    .hero-points li {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.6rem;
-      font-size: 0.82rem;
-      color: rgba(230, 240, 255, 0.85);
-    }
-
-    .hero-points li::before {
-      content: '';
-      width: 10px;
-      height: 10px;
-      border-radius: 999px;
-      background: rgba(0, 209, 255, 0.65);
-      box-shadow: 0 0 14px rgba(0, 209, 255, 0.55);
-    }
-
-    .hero-footnote {
-      margin: 0;
-      font-size: 0.72rem;
-      letter-spacing: 0.02em;
-      color: rgba(176, 206, 235, 0.65);
-      text-transform: uppercase;
-    }
-
-    .hero-visual {
-      flex: 1 1 220px;
-      min-width: 220px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 1.1rem;
-      text-align: center;
+    .glass-panel:hover,
+    .glass-panel:focus-within {
+      transform: translateY(-6px);
+      box-shadow: 0 38px 120px rgba(14, 40, 88, 0.65);
+      border-color: rgba(0, 209, 255, 0.28);
     }
 
     .hero-orb {
-      width: clamp(200px, 20vw, 240px);
+      position: relative;
+      width: clamp(200px, 28vw, 280px);
       aspect-ratio: 1 / 1;
       border-radius: 50%;
-      background: radial-gradient(circle at 30% 30%, rgba(0, 209, 255, 0.38), rgba(8, 10, 18, 0.35) 55%),
-                  radial-gradient(circle at 70% 65%, rgba(255, 110, 255, 0.32), rgba(6, 10, 30, 0.45) 70%);
-      position: relative;
-      display: grid;
-      place-items: center;
-      overflow: hidden;
-      box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.35), 0 24px 60px rgba(14, 40, 82, 0.55);
-      animation: breathe 14s ease-in-out infinite;
+      overflow: visible;
+      filter: drop-shadow(0 0 55px rgba(56, 189, 248, 0.35));
     }
 
-    .step {
-      padding: clamp(1.65rem, 2.8vw, 2.1rem);
-      display: flex;
-      flex-direction: column;
-      gap: 1.2rem;
+    .hero-orb .orb-layer {
+      position: absolute;
+      inset: 0;
+      border-radius: 9999px;
+      animation: breathe 7s ease-in-out infinite;
     }
 
-    .step h2 {
-      margin: 0;
-      font-size: 1rem;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 0.7rem;
-      letter-spacing: 0.02em;
-      text-transform: uppercase;
+    .hero-orb .orb-outer {
+      background: radial-gradient(circle, rgba(59, 130, 246, 0.18), rgba(17, 24, 39, 0));
+      animation-delay: 0s;
     }
 
-    .step h2 span {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 32px;
-      height: 32px;
-      border-radius: 999px;
-      background: rgba(0, 209, 255, 0.18);
-      border: 1px solid rgba(0, 209, 255, 0.25);
-      font-size: 0.82rem;
-      font-weight: 600;
-      color: rgba(208, 236, 255, 0.88);
+    .hero-orb .orb-middle {
+      inset: 12%;
+      background: radial-gradient(circle, rgba(94, 234, 212, 0.35), rgba(15, 23, 42, 0));
+      animation-delay: 0.3s;
     }
 
-    .step-copy {
-      margin: 0;
-      font-size: 0.82rem;
-      line-height: 1.5;
-      color: rgba(211, 228, 255, 0.72);
+    .hero-orb .orb-inner {
+      inset: 24%;
+      background: radial-gradient(circle, rgba(139, 92, 246, 0.75), rgba(15, 23, 42, 0));
+      animation-delay: 0.6s;
+      box-shadow: inset 0 0 25px rgba(248, 250, 255, 0.18);
     }
 
-    #uploadForm {
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
+    @media (max-width: 640px) {
+      .hero-orb {
+        width: clamp(160px, 55vw, 220px);
+        margin: 0 auto;
+      }
     }
 
     #dropzone {
-      display: flex;
-      flex-direction: column;
-      gap: 0.55rem;
-      border: 1.4px dashed rgba(189, 208, 245, 0.4);
-      border-radius: 18px;
-      background: rgba(3, 4, 9, 0.25);
+      border-radius: 22px;
+      border: 1.6px dashed rgba(190, 214, 255, 0.48);
+      background: rgba(3, 6, 16, 0.45);
+      transition: border-color 0.35s ease, background 0.35s ease, transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
       cursor: pointer;
-      padding: 1.05rem 1rem 1rem;
-      transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
-                  border-color 0.3s ease,
-                  background 0.3s ease;
     }
 
     #dropzone:hover,
+    #dropzone:focus-visible,
     #dropzone.active {
-      border-color: rgba(0, 209, 255, 0.85);
-      background: radial-gradient(circle at top, rgba(0, 209, 255, 0.12), rgba(3, 4, 9, 0.35));
-      transform: translateY(-4px);
+      border-color: rgba(0, 209, 255, 0.88);
+      background: radial-gradient(circle at top, rgba(0, 209, 255, 0.18), rgba(3, 6, 16, 0.5));
+      transform: translateY(-2px);
     }
 
     #dropzone input {
       display: none;
     }
 
-    #dropLabel {
-      display: flex;
-      gap: 0.7rem;
-      align-items: center;
-      font-size: 0.82rem;
-    }
-
-    #dropLabel .icon {
-      font-size: 1.25rem;
-    }
-
-    #dropzone small {
-      font-size: 0.7rem;
-      color: rgba(207, 226, 255, 0.55);
-      padding-left: 2.1rem;
-      line-height: 1.5;
-    }
-
-    .mode-note {
-      background: rgba(1, 8, 20, 0.35);
-      border: 1px solid rgba(138, 185, 255, 0.038);
-      border-radius: 18px;
-      padding: 0.75rem 0.95rem;
-      display: flex;
-      flex-direction: column;
-      gap: 0.24rem;
-    }
-
-    .mode-note strong {
-      font-size: 0.72rem;
-      letter-spacing: 0.08rem;
-      text-transform: uppercase;
-      color: rgba(245, 250, 255, 0.85);
-    }
-
-    .mode-note span {
-      font-size: 0.7rem;
-      color: rgba(219, 233, 255, 0.47);
-    }
-
-    #processBtn {
-      border: none;
-      background: var(--accent-grad);
-      border-radius: 999px;
-      padding: 0.68rem 1rem 0.72rem;
-      font-weight: 600;
-      font-size: 0.78rem;
-      letter-spacing: 0.04rem;
-      cursor: pointer;
-      color: #03040a;
+    .badge {
       display: inline-flex;
       align-items: center;
-      gap: 0.5rem;
       justify-content: center;
-      box-shadow: 0 12px 30px rgba(0, 209, 255, 0.28);
-      transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1),
-                  box-shadow 0.45s cubic-bezier(0.16, 1, 0.3, 1),
-                  filter 0.3s ease;
-    }
-
-    #processBtn::after {
-      content: '→';
-      opacity: 0.85;
-    }
-
-    #processBtn[disabled] {
-      opacity: 0.6;
-      cursor: not-allowed;
-      filter: saturate(0.65);
+      margin-right: 0.5rem;
+      width: 1.5rem;
+      height: 1.5rem;
+      border-radius: 999px;
+      background: rgba(0, 209, 255, 0.18);
+      border: 1px solid rgba(0, 209, 255, 0.35);
+      font-size: 0.75rem;
+      line-height: 1;
     }
 
     .loader {
       display: flex;
-      gap: 1rem;
+      gap: 0.9rem;
       align-items: center;
-      background: rgba(2, 5, 14, 0.35);
-      border: 1px solid rgba(182, 217, 255, 0.03);
-      border-radius: 14px;
-      padding: 0.7rem 0.85rem;
-    }
-
-    .loader.hidden {
-      display: none;
+      border-radius: 16px;
+      background: rgba(2, 6, 18, 0.45);
+      border: 1px solid rgba(180, 220, 255, 0.08);
+      padding: 0.75rem 1rem;
     }
 
     .orbital {
-      width: 34px;
-      height: 34px;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
       border: 2px solid rgba(0, 209, 255, 0.35);
       border-top-color: rgba(0, 209, 255, 1);
-      border-radius: 999px;
-      animation: spin 0.7s linear infinite;
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-
-    #loaderText {
-      font-size: 0.72rem;
-      color: rgba(207, 223, 245, 0.75);
-    }
-
-    .status {
-      font-size: 0.71rem;
-      color: rgba(214, 231, 255, 0.55);
-      display: flex;
-      gap: 0.35rem;
-      align-items: center;
-      flex-wrap: wrap;
-      min-height: 1em;
-    }
-
-    .badge {
-      display: inline-flex;
-      background: rgba(0, 209, 255, 0.14);
-      color: rgba(214, 232, 255, 0.9);
-      border: 1px solid rgba(0, 209, 255, 0.15);
-      border-radius: 999px;
-      font-size: 0.62rem;
-      padding: 0.16rem 0.6rem 0.2rem;
+      animation: spin 0.75s linear infinite;
     }
 
     .download-card {
-      background: rgba(0, 6, 22, 0.35);
-      border: 1px solid rgba(174, 212, 255, 0.02);
-      border-radius: 16px;
-      padding: 0.85rem 0.95rem 0.75rem;
+      border-radius: 20px;
+      background: rgba(5, 10, 22, 0.6);
+      border: 1px solid rgba(148, 194, 255, 0.14);
+      padding: 1.2rem;
       display: flex;
       flex-direction: column;
-      gap: 0.4rem;
-    }
-
-    .download-card.hidden {
-      display: none;
+      gap: 0.9rem;
     }
 
     .download-card h3 {
       margin: 0;
-      font-size: 0.82rem;
-      font-weight: 600;
-    }
-
-    .download a {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.4rem;
-      background: rgba(0, 209, 255, 0.1);
-      border: 1px solid rgba(0, 209, 255, 0.25);
-      border-radius: 999px;
-      font-size: 0.72rem;
-      padding: 0.35rem 0.8rem 0.38rem;
-      color: #fefefe;
-      text-decoration: none;
-    }
-
-    .download span {
-      font-size: 0.74rem;
-      color: rgba(196, 218, 255, 0.65);
+      font-size: 0.9rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
     }
 
     .artifact-list {
-      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
       padding: 0;
-      margin: 0.15rem 0 0;
-      display: grid;
-      gap: 0.35rem;
-      font-size: 0.68rem;
-      color: rgba(190, 214, 255, 0.7);
-    }
-
-    .artifact-list.hidden {
-      display: none;
+      margin: 0;
+      list-style: none;
     }
 
     .artifact-list li {
       display: flex;
-      gap: 0.4rem;
-      align-items: baseline;
-      background: rgba(0, 12, 32, 0.28);
-      border: 1px solid rgba(137, 187, 255, 0.07);
-      border-radius: 12px;
-      padding: 0.35rem 0.55rem;
+      justify-content: space-between;
+      gap: 1rem;
+      font-size: 0.75rem;
+      color: rgba(214, 234, 255, 0.72);
     }
 
-    .artifact-list li span {
-      text-transform: uppercase;
-      letter-spacing: 0.08rem;
-      font-size: 0.58rem;
-      color: rgba(216, 235, 255, 0.6);
+    .artifact-list code {
+      font-family: 'Space Grotesk', system-ui, sans-serif;
+      letter-spacing: 0.02em;
+      color: rgba(233, 245, 255, 0.86);
     }
 
-    .artifact-list li code {
-      font-family: "Space Grotesk", system-ui, sans-serif;
-      font-size: 0.72rem;
-      color: rgba(233, 245, 255, 0.88);
-      background: transparent;
-      padding: 0;
+    @keyframes drift {
+      from {
+        transform: scale(1.05) translate3d(-12px, -10px, 0);
+      }
+      to {
+        transform: scale(1.12) translate3d(14px, 12px, 0);
+      }
     }
 
-    .step-note {
-      font-size: 0.72rem;
-      color: rgba(175, 204, 237, 0.6);
-      margin: 0;
+    @keyframes breathe {
+      0%,
+      100% {
+        transform: scale(0.95);
+        filter: hue-rotate(0deg);
+      }
+      50% {
+        transform: scale(1.05);
+        filter: hue-rotate(15deg);
+      }
     }
 
-    .hidden {
-      display: none !important;
+    @keyframes orbit {
+      to {
+        transform: rotate(360deg);
+      }
     }
 
-    footer {
-      font-size: 0.72rem;
-      color: rgba(175, 204, 237, 0.52);
-      display: flex;
-      gap: 0.4rem;
-      align-items: baseline;
-      background: rgba(0, 12, 32, 0.28);
-      border: 1px solid rgba(137, 187, 255, 0.07);
-      border-radius: 12px;
-      padding: 0.35rem 0.55rem;
-    }
-
-    .artifact-list li span {
-      text-transform: uppercase;
-      letter-spacing: 0.08rem;
-      font-size: 0.58rem;
-      color: rgba(216, 235, 255, 0.6);
-    }
-
-    .artifact-list li code {
-      font-family: "Space Grotesk", system-ui, sans-serif;
-      font-size: 0.72rem;
-      color: rgba(233, 245, 255, 0.88);
-      background: transparent;
-      padding: 0;
-    }
-
-    .step-note {
-      font-size: 0.72rem;
-      color: rgba(175, 204, 237, 0.6);
-      margin: 0;
-    }
-
-    @media (max-width: 980px) {
-      .workflow { grid-template-columns: minmax(0, 1fr); }
-    }
-
-    @media (max-width: 560px) {
-      body { padding: 1.6rem; }
-      .step, .brand { padding: 1.6rem; }
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
     }
   </style>
 </head>
-<body>
+<body class="relative min-h-screen overflow-x-hidden bg-transparent text-slate-100 antialiased">
   <div class="nebula"></div>
   <div class="constellation"></div>
-  <div class="shell">
-    <section class="panel brand-panel brand">
-      <div class="logo-badge"><span></span>ScanBass Studio</div>
-      <h1>Collab with ease.</h1>
-      <p class="tagline">You are one click away from your 808 in key. Drop up to 30 seconds of audio and we resample, isolate the lowest line, and hand back a DAW-ready MIDI.</p>
-      <ul class="highlights">
-        <li>Auto trims to the first 30&nbsp;s to stay under 1 Render CPU</li>
-        <li>Finds the lowest melodic line for instant basslines</li>
-        <li>Packs MIDI plus optional stems inside a single download</li>
-      </ul>
-      <div class="spectrum" aria-hidden="true">
-        <span></span>
-        <span></span>
-        <span></span>
+
+  <main class="relative z-10 mx-auto flex w-full max-w-6xl flex-col gap-16 px-6 pb-24 pt-12 sm:px-10 lg:px-16">
+    <section class="glass-panel px-6 py-12 sm:px-10 lg:px-14">
+      <div class="flex min-h-[75vh] flex-col items-center justify-center gap-12 text-center lg:min-h-[80vh] lg:grid lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:text-left">
+        <div class="flex w-full flex-col items-center gap-8 lg:items-start">
+          <div class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1 text-[0.65rem] uppercase tracking-[0.28em] text-slate-200/75">
+            <span class="h-2.5 w-2.5 rounded-full bg-gradient-to-br from-cyan-300 via-sky-400 to-fuchsia-500"></span>
+            ScanBass Studio
+          </div>
+          <div class="flex w-full flex-col gap-4 lg:max-w-xl">
+            <h1 class="font-display text-4xl leading-tight tracking-tight text-white sm:text-5xl">Collab with ease.</h1>
+            <p class="text-base leading-relaxed text-slate-200/85 sm:text-lg">
+              You are one click away from your 808 in key. Drop up to 30 seconds of audio and we resample, isolate the lowest line, and hand back a DAW-ready MIDI.
+            </p>
+          </div>
+          <ul class="w-full max-w-xl space-y-3 text-left text-sm text-slate-200/80">
+            <li class="flex items-start gap-3 leading-relaxed">
+              <span class="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-cyan-300/80 shadow-[0_0_10px_rgba(34,211,238,0.6)]"></span>
+              <span>Instantly turn your melody into a perfect bassline.</span>
+            </li>
+            <li class="flex items-start gap-3 leading-relaxed">
+              <span class="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-cyan-300/80 shadow-[0_0_10px_rgba(34,211,238,0.6)]"></span>
+              <span>Get clean, DAW-ready MIDI in seconds.</span>
+            </li>
+            <li class="flex items-start gap-3 leading-relaxed">
+              <span class="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-cyan-300/80 shadow-[0_0_10px_rgba(34,211,238,0.6)]"></span>
+              <span>Spend less time tweaking, more time creating.</span>
+            </li>
+          </ul>
+          <div class="mt-6 flex w-full flex-col gap-3 text-left text-[0.7rem] uppercase tracking-[0.22em] text-slate-300/70 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+            <span>Tip: Bounce your hook or intro — only the first 30 seconds are analyzed.</span>
+            <span>Uploads convert into a 44.1&nbsp;kHz PCM16 clip for accurate scanning.</span>
+          </div>
+        </div>
+        <div class="flex w-full items-center justify-center">
+          <div class="hero-orb">
+            <div class="orb-layer orb-outer"></div>
+            <div class="orb-layer orb-middle"></div>
+            <div class="orb-layer orb-inner"></div>
+          </div>
+        </div>
       </div>
-      <footer>
-        <span>Tip: Bounce your hook or intro — only the first 30 seconds are analyzed.</span>
-        <span>Uploads convert into a 44.1&nbsp;kHz PCM16 clip for accurate scanning.</span>
-      </footer>
     </section>
 
-    <div class="workflow">
-      <section class="panel step step-upload">
-        <h2><span>1</span>Drop your loop</h2>
-        <p class="step-copy">Drag in a hook, loop, or bass idea — we automatically trim to 30 seconds and normalize for Render-friendly CPU use.</p>
-        <form id="uploadForm">
-          <label id="dropzone" for="fileInput">
+    <div class="grid gap-6 lg:grid-cols-3">
+      <section class="glass-panel group flex flex-col gap-6 p-6 sm:p-8">
+        <h2 class="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.28em] text-slate-100/85">
+          <span class="flex h-9 w-9 items-center justify-center rounded-full border border-cyan-300/35 bg-cyan-400/15 text-sm font-semibold text-cyan-100">1</span>
+          Drop your loop
+        </h2>
+        <p class="text-sm leading-relaxed text-slate-200/80">
+          Drag in a hook, loop, or bass idea — we automatically trim to 30 seconds and normalize for Render-friendly CPU use.
+        </p>
+        <form id="uploadForm" class="flex flex-col gap-4">
+          <label id="dropzone" for="fileInput" class="flex flex-col gap-3 p-5 text-sm text-slate-100/85 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300/60">
             <input type="file" id="fileInput" accept=".wav,.mid,.midi" />
-            <div id="dropLabel">
-              <span class="icon">🎵</span>
+            <div id="dropLabel" class="flex items-center gap-3 text-base text-slate-100/90">
+              <span class="text-xl">🎵</span>
               <span>Drag &amp; drop or click to upload</span>
             </div>
-            <small>Only the first 30 seconds are processed. We create a local 44.1&nbsp;kHz PCM16 clip to keep scanning accurate and CPU-friendly.</small>
+            <small class="pl-9 text-xs leading-relaxed text-slate-300/70">Only the first 30 seconds are processed. We create a local 44.1&nbsp;kHz PCM16 clip to keep scanning accurate and CPU-friendly.</small>
           </label>
 
-          <div class="mode-note">
-            <strong>Poly mode</strong>
+          <div class="flex flex-col gap-2 rounded-2xl border border-white/5 bg-white/5/50 p-4 text-xs text-slate-200/75">
+            <strong class="text-[0.68rem] font-semibold uppercase tracking-[0.3em] text-slate-100/85">Poly mode</strong>
             <span>We pick the lowest melodic line from your audio / MIDI.</span>
             <span>Outputs a single bassline as standard MIDI.</span>
             <span>Uploads longer than 30 s are automatically truncated after preparation.</span>
           </div>
 
-          <button type="submit" id="processBtn">Render MIDI</button>
+          <button type="submit" id="processBtn" class="inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-cyan-300 via-sky-400 to-fuchsia-500 px-6 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-slate-900 shadow-[0_16px_40px_rgba(34,211,238,0.35)] transition-transform duration-500 hover:-translate-y-0.5 hover:shadow-[0_24px_70px_rgba(34,211,238,0.45)] disabled:cursor-not-allowed disabled:opacity-60">
+            Render MIDI
+          </button>
         </form>
       </section>
 
-      <section class="panel step step-progress">
-        <h2><span>2</span>See the progress</h2>
-        <p class="step-copy">Once uploaded we trim, resample, and transcribe the lowest notes. Status updates land here while the job stays queued or running.</p>
+      <section class="glass-panel flex flex-col gap-6 p-6 sm:p-8">
+        <h2 class="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.28em] text-slate-100/85">
+          <span class="flex h-9 w-9 items-center justify-center rounded-full border border-cyan-300/35 bg-cyan-400/15 text-sm font-semibold text-cyan-100">2</span>
+          See the progress
+        </h2>
+        <p class="text-sm leading-relaxed text-slate-200/80">
+          Once uploaded we trim, resample, and transcribe the lowest notes. Status updates land here while the job stays queued or running.
+        </p>
         <div id="loader" class="loader hidden" role="status" aria-live="polite">
           <div class="orbital"></div>
-          <p id="loaderText">Preparing upload…</p>
+          <p id="loaderText" class="text-sm text-slate-200/80">Preparing upload…</p>
         </div>
-        <div id="status" class="status" aria-live="polite">Waiting for your upload.</div>
+        <div id="status" class="rounded-2xl border border-white/5 bg-white/5/50 p-4 text-sm leading-relaxed text-slate-200/85" aria-live="polite">
+          Waiting for your upload.
+        </div>
       </section>
 
-      <section class="panel step step-download">
-        <h2><span>3</span>Download the bassline</h2>
-        <p class="step-copy">When we finish packaging, grab the bassline MIDI along with any extra artifacts generated from the scan.</p>
-        <p id="downloadHint" class="step-note">Results will unlock here once the transcription completes.</p>
+      <section class="glass-panel flex flex-col gap-6 p-6 sm:p-8">
+        <h2 class="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.28em] text-slate-100/85">
+          <span class="flex h-9 w-9 items-center justify-center rounded-full border border-cyan-300/35 bg-cyan-400/15 text-sm font-semibold text-cyan-100">3</span>
+          Download the bassline
+        </h2>
+        <p class="text-sm leading-relaxed text-slate-200/80">
+          When we finish packaging, grab the bassline MIDI along with any extra artifacts generated from the scan.
+        </p>
+        <p id="downloadHint" class="text-xs uppercase tracking-[0.24em] text-slate-300/65">Results will unlock here once the transcription completes.</p>
         <div id="downloadCard" class="download-card hidden">
           <h3>MIDI ready</h3>
-          <div id="midiDownload" class="download"></div>
+          <div id="midiDownload" class="text-sm text-cyan-200"></div>
           <ul id="artifactList" class="artifact-list hidden" aria-live="polite"></ul>
         </div>
       </section>
     </div>
-  </div>
+  </main>
 
   <script>
     const API_BASE = "https://scanbass-backend.onrender.com";
@@ -760,43 +485,32 @@
       if (currentDownloadUrl) {
         URL.revokeObjectURL(currentDownloadUrl);
       }
-      currentDownloadUrl = URL.createObjectURL(blob);
-      midiDownload.innerHTML = `<a href="${currentDownloadUrl}" download="${downloadName}">⬇️ Download ${downloadName}</a><span>${describeDownload(downloadName)}</span>`;
+      const url = URL.createObjectURL(blob);
+      currentDownloadUrl = url;
+      const name = downloadName || "scanbass.mid";
+      midiDownload.innerHTML = `<a class="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-cyan-200 transition hover:bg-white/15" href="${url}" download="${name}" draggable="true">⬇️ Download / drag to DAW</a><span class="block pt-2 text-[0.7rem] text-slate-300/75">${describeDownload(name)}</span>`;
       downloadHint?.classList.add("hidden");
       downloadCard.classList.remove("hidden");
       renderArtifacts(artifacts);
     }
 
-    function cancelPolling() {
-      if (currentPollAbort) {
-        currentPollAbort.abort();
-        currentPollAbort = null;
-      }
-    }
-
-    function getFileStem(filename) {
-      if (!filename) return "input";
-      const base = filename.split(/[\\/]/).pop() || filename;
-      const dot = base.lastIndexOf(".");
-      return dot > 0 ? base.slice(0, dot) : base;
-    }
-
     function fallbackDownloadName(jobId, originalName) {
-      if (jobId) {
-        return `${jobId}.zip`;
+      if (originalName) {
+        const dot = originalName.lastIndexOf('.');
+        const base = dot > -1 ? originalName.slice(0, dot) : originalName;
+        return `${base || "scanbass"}.mid`;
       }
-      return `scanbass_${getFileStem(originalName)}.zip`;
+      return `scanbass-${jobId}.mid`;
     }
 
     function extractFileName(response, jobId, originalName) {
-      const header = response.headers.get("content-disposition") || "";
-      let match = header.match(/filename\*=UTF-8''([^;]+)/i);
+      const header = response.headers.get("Content-Disposition") || "";
+      let match = header.match(/filename\*=UTF-8''([^;\s]+)/i);
       if (match && match[1]) {
-        const cleaned = match[1].replace(/"/g, "");
         try {
-          return decodeURIComponent(cleaned);
+          return decodeURIComponent(match[1]);
         } catch (_) {
-          return cleaned;
+          return match[1];
         }
       }
       match = header.match(/filename="?([^";]+)"?/i);
@@ -941,7 +655,7 @@
 
     function updateDropLabel(filename) {
       const label = document.getElementById("dropLabel");
-      label.innerHTML = `<span class="icon">✅</span><span>${filename}</span>`;
+      label.innerHTML = `<span class="text-xl">✅</span><span>${filename}</span>`;
       setStatus(`Only the first ${LIMIT_SECONDS} seconds will be analyzed.`, "ℹ️");
     }
 
@@ -984,6 +698,13 @@
         processBtn.disabled = false;
       }
     });
+
+    function cancelPolling() {
+      if (currentPollAbort) {
+        currentPollAbort.abort();
+        currentPollAbort = null;
+      }
+    }
 
     window.addEventListener("beforeunload", () => {
       if (currentDownloadUrl) {
