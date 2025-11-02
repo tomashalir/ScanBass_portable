@@ -113,6 +113,7 @@ class HeavyBassTranscriber(BaseBassTranscriber):
         self.fmax = librosa.note_to_hz("C5")
         self._demucs_model = None
         self._crepe_loaded = False
+        self._crepe_device: str | None = None
 
     def warmup(self) -> None:
         silence = np.zeros(int(self.crepe_sample_rate), dtype=np.float32)
@@ -128,12 +129,14 @@ class HeavyBassTranscriber(BaseBassTranscriber):
 
     def _ensure_crepe(self) -> None:
         if not self._crepe_loaded:
-            device = self.device
-            # torchcrepe.load.model takes the device as its first positional argument
-            # and optionally a capacity keyword. Passing the device by keyword causes
-            # a ``multiple values for argument 'device'`` error when predict() also
-            # forwards it positionally, so keep it positional here.
-            self.torchcrepe.load.model(device, capacity="full")
+            device_str = str(self.device)
+            # torchcrepe.load.model(device=..., capacity=...) avoids double binding the
+            # ``device`` parameter. Earlier versions passed ``device`` positionally and
+            # again by keyword, triggering ``multiple values for argument 'device'`` when
+            # torchcrepe reused the loader. Keeping it keyword-only ensures compatibility
+            # with both torchcrepe.load and the internal torchcrepe.infer cache.
+            self.torchcrepe.load.model(device=device_str, capacity="full")
+            self._crepe_device = device_str
             self._crepe_loaded = True
 
     # Processing --------------------------------------------------------
@@ -190,7 +193,7 @@ class HeavyBassTranscriber(BaseBassTranscriber):
                 model="full",
                 batch_size=128,
                 return_periodicity=True,
-                device=str(self.device),
+                device=self._crepe_device or str(self.device),
             )
 
         pitches = f0[0].cpu().numpy()
