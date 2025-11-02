@@ -12,6 +12,7 @@ if str(ROOT) not in sys.path:
 # ---------------------------------------------------
 
 import asyncio
+import importlib
 import logging
 import os
 from typing import Tuple
@@ -23,7 +24,7 @@ import shutil
 import tempfile
 import uuid
 from dataclasses import dataclass, field, asdict as dataclass_asdict
-from typing import Dict, Literal, Optional
+from typing import Dict, Literal
 
 import librosa
 import numpy as np
