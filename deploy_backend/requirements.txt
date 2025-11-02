@@ -1,14 +1,18 @@
+# --- Core server ---
 fastapi
 uvicorn[standard]
 python-multipart
+
+# --- Audio processing ---
 numpy
 scipy
 soundfile
 librosa==0.10.1
+
+# --- MIDI handling ---
 pretty_midi
 mido
-torch>=2.2.0
-torchaudio>=2.2.0
-demucs>=4.0.1
-torchcrepe>=0.0.23
+
+# --- AI transcription (melody -> MIDI) ---
+# Basic Pitch využívá TensorFlow Lite a nevyžaduje PyTorch
 basic-pitch>=0.4.0
