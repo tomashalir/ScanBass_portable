@@ -38,9 +38,9 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: clamp(1.8rem, 4vw, 3.2rem);
+      padding: clamp(1.4rem, 3vw, 2.6rem);
       position: relative;
-      overflow: hidden;
+      overflow-x: hidden;
     }
 
     .nebula {
@@ -74,12 +74,19 @@
     }
 
     .shell {
-      width: min(1120px, 96vw);
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      gap: clamp(2rem, 4vw, 3.4rem);
+      width: min(1080px, 94vw);
+      display: flex;
+      flex-direction: column;
+      gap: clamp(1.1rem, 2.4vw, 1.8rem);
       position: relative;
       z-index: 1;
+    }
+
+    .flow-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: clamp(1rem, 2vw, 1.6rem);
+      align-items: stretch;
     }
 
     .panel {
@@ -87,10 +94,25 @@
       border: 1px solid var(--panel-border);
       border-radius: var(--radius-xl);
       backdrop-filter: blur(28px);
-      box-shadow: 0 32px 80px rgba(2, 10, 30, 0.55);
+      box-shadow: 0 24px 60px rgba(2, 10, 30, 0.45);
       position: relative;
       overflow: hidden;
       isolation: isolate;
+      opacity: 0;
+      transform: translate3d(0, 40px, 0) scale(0.98);
+      animation: floatIn 1.05s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
+      animation-delay: var(--delay, 0s);
+      transition: transform 0.65s cubic-bezier(0.16, 1, 0.3, 1),
+                  box-shadow 0.65s cubic-bezier(0.16, 1, 0.3, 1),
+                  border-color 0.5s ease;
+      will-change: transform;
+    }
+
+    .panel:hover,
+    .panel:focus-within {
+      transform: translate3d(0, -8px, 0) scale(1.01);
+      box-shadow: 0 36px 90px rgba(12, 32, 82, 0.55);
+      border-color: rgba(0, 209, 255, 0.25);
     }
 
     .panel::before {
@@ -112,11 +134,51 @@
       pointer-events: none;
     }
 
-    .brand {
-      padding: clamp(1.85rem, 3.4vw, 2.5rem);
+    @keyframes floatIn {
+      from {
+        opacity: 0;
+        transform: translate3d(0, 44px, 0) scale(0.96);
+      }
+      to {
+        opacity: 1;
+        transform: translate3d(0, 0, 0) scale(1);
+      }
+    }
+
+    @keyframes breathe {
+      0%, 100% { transform: scale(1) translate3d(0, 0, 0); }
+      50% { transform: scale(1.04) translate3d(0, -6px, 0); }
+    }
+
+    @keyframes orbit {
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes glimmer {
+      0%, 100% { opacity: 0.82; transform: scale(0.96); }
+      50% { opacity: 1; transform: scale(1.05); }
+    }
+
+    .hero {
+      padding: clamp(1.7rem, 2.6vw, 2.2rem);
       display: flex;
       flex-direction: column;
-      gap: 1.35rem;
+      gap: clamp(1.4rem, 2.6vw, 2rem);
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+      gap: clamp(1.2rem, 3vw, 2.4rem);
+      align-items: center;
+    }
+
+    .hero-copy {
+      display: flex;
+      flex-direction: column;
+      gap: clamp(1rem, 2.4vw, 1.6rem);
+      align-items: flex-start;
+      max-width: 32rem;
     }
 
     .logo-badge {
@@ -142,7 +204,7 @@
 
     h1 {
       font-family: 'Space Grotesk', system-ui, sans-serif;
-      font-size: clamp(2rem, 3vw, 2.7rem);
+      font-size: clamp(2.2rem, 4vw, 3rem);
       line-height: 1.02;
       letter-spacing: -0.01em;
       margin: 0;
@@ -150,54 +212,146 @@
 
     .tagline {
       margin: 0;
-      font-size: 0.9rem;
-      line-height: 1.6;
+      font-size: clamp(0.98rem, 2.2vw, 1.08rem);
+      line-height: 1.55;
       color: var(--muted);
-      max-width: 36rem;
+      max-width: 32rem;
     }
 
-    .highlights {
+    .hero-points {
       list-style: none;
       padding: 0;
-      margin: 0.25rem 0 0;
-      display: grid;
-      gap: 0.6rem;
-    }
-
-    .highlights li {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.45rem;
-      font-size: 0.78rem;
-      color: rgba(230, 240, 255, 0.82);
-    }
-
-    .highlights li::before {
-      content: '●';
-      font-size: 0.64rem;
-      color: rgba(0, 209, 255, 0.6);
-    }
-
-    .spectrum {
-      display: flex;
-      gap: 0.5rem;
-      margin-top: 1rem;
-    }
-
-    .spectrum span {
-      flex: 1;
-      height: 40px;
-      border-radius: 999px;
-      background: linear-gradient(180deg, rgba(0, 209, 255, 0.3), rgba(1,4,9,0));
-      border: 1px solid rgba(177, 236, 255, 0.06);
-      filter: drop-shadow(0 0 14px rgba(0, 209, 255, 0.4));
-    }
-
-    .card {
-      padding: clamp(1.65rem, 2.8vw, 2.1rem);
+      margin: 0;
       display: flex;
       flex-direction: column;
-      gap: 1.4rem;
+      gap: 0.55rem;
+    }
+
+    .hero-points li {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-size: 0.82rem;
+      color: rgba(230, 240, 255, 0.85);
+    }
+
+    .hero-points li::before {
+      content: '';
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(0, 209, 255, 0.65);
+      box-shadow: 0 0 14px rgba(0, 209, 255, 0.55);
+    }
+
+    .hero-footnote {
+      margin: 0;
+      font-size: 0.7rem;
+      letter-spacing: 0.12em;
+      color: rgba(176, 206, 235, 0.6);
+      text-transform: uppercase;
+    }
+
+    .hero-visual {
+      min-width: 220px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      text-align: center;
+    }
+
+    .hero-orb {
+      width: clamp(180px, 36vw, 240px);
+      aspect-ratio: 1 / 1;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, rgba(0, 209, 255, 0.38), rgba(8, 10, 18, 0.35) 55%),
+                  radial-gradient(circle at 70% 65%, rgba(255, 110, 255, 0.32), rgba(6, 10, 30, 0.45) 70%);
+      position: relative;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.35), 0 24px 60px rgba(14, 40, 82, 0.55);
+      animation: breathe 14s ease-in-out infinite;
+    }
+
+    .hero-orb::before {
+      content: '';
+      position: absolute;
+      inset: 12%;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      filter: blur(0.3px);
+      opacity: 0.8;
+      animation: orbit 18s linear infinite;
+    }
+
+    .hero-orb::after {
+      content: '';
+      position: absolute;
+      inset: 30% 10% 10% 30%;
+      border-radius: 50% / 60%;
+      background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.35), transparent 60%);
+      opacity: 0.7;
+      transform: rotate(-12deg);
+    }
+
+    .hero-orb-core {
+      width: 54%;
+      aspect-ratio: 1 / 1;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.9), rgba(0, 209, 255, 0.2) 55%, rgba(0, 0, 0, 0) 70%);
+      box-shadow: 0 0 26px rgba(0, 209, 255, 0.4);
+      animation: glimmer 5.5s ease-in-out infinite;
+    }
+
+    .hero-caption {
+      margin: 0;
+      font-size: 0.74rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: rgba(196, 218, 255, 0.58);
+      max-width: 20rem;
+    }
+
+    .step {
+      padding: clamp(1.6rem, 2.4vw, 2.05rem);
+      display: flex;
+      flex-direction: column;
+      gap: 1.1rem;
+    }
+
+    .step h2 {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 0.7rem;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+
+    .step h2 span {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 999px;
+      background: rgba(0, 209, 255, 0.18);
+      border: 1px solid rgba(0, 209, 255, 0.25);
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: rgba(208, 236, 255, 0.88);
+    }
+
+    .step-copy {
+      margin: 0;
+      font-size: 0.82rem;
+      line-height: 1.5;
+      color: rgba(211, 228, 255, 0.72);
     }
 
     #uploadForm {
@@ -214,15 +368,17 @@
       border-radius: 18px;
       background: rgba(3, 4, 9, 0.25);
       cursor: pointer;
-      padding: 1.1rem 1rem 1rem;
-      transition: all 0.18s ease-out;
+      padding: 1.05rem 1rem 1rem;
+      transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+                  border-color 0.3s ease,
+                  background 0.3s ease;
     }
 
     #dropzone:hover,
     #dropzone.active {
       border-color: rgba(0, 209, 255, 0.85);
       background: radial-gradient(circle at top, rgba(0, 209, 255, 0.12), rgba(3, 4, 9, 0.35));
-      transform: translateY(-1px);
+      transform: translateY(-4px);
     }
 
     #dropzone input {
@@ -242,18 +398,19 @@
 
     #dropzone small {
       font-size: 0.7rem;
-      color: rgba(207, 226, 255, 0.45);
+      color: rgba(207, 226, 255, 0.55);
       padding-left: 2.1rem;
+      line-height: 1.5;
     }
 
     .mode-note {
       background: rgba(1, 8, 20, 0.35);
       border: 1px solid rgba(138, 185, 255, 0.038);
       border-radius: 18px;
-      padding: 0.85rem 1rem;
+      padding: 0.75rem 0.95rem;
       display: flex;
       flex-direction: column;
-      gap: 0.28rem;
+      gap: 0.24rem;
     }
 
     .mode-note strong {
@@ -282,11 +439,31 @@
       align-items: center;
       gap: 0.5rem;
       justify-content: center;
+      box-shadow: 0 12px 30px rgba(0, 209, 255, 0.28);
+      transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+                  box-shadow 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+                  filter 0.3s ease;
     }
 
     #processBtn::after {
       content: '→';
       opacity: 0.85;
+    }
+
+    #processBtn:not([disabled]):hover {
+      transform: translateY(-3px);
+      box-shadow: 0 20px 40px rgba(0, 209, 255, 0.35);
+    }
+
+    #processBtn:not([disabled]):active {
+      transform: translateY(-1px);
+      box-shadow: 0 12px 26px rgba(0, 209, 255, 0.32);
+    }
+
+    #processBtn[disabled] {
+      opacity: 0.6;
+      cursor: not-allowed;
+      filter: saturate(0.65);
     }
 
     .loader {
@@ -328,6 +505,7 @@
       gap: 0.35rem;
       align-items: center;
       flex-wrap: wrap;
+      min-height: 1em;
     }
 
     .badge {
@@ -354,7 +532,7 @@
       display: none;
     }
 
-    .download-card h2 {
+    .download-card h3 {
       margin: 0;
       font-size: 0.82rem;
       font-weight: 600;
@@ -378,35 +556,127 @@
       color: rgba(196, 218, 255, 0.65);
     }
 
-    footer {
-      font-size: 0.72rem;
-      color: rgba(175, 204, 237, 0.52);
+    .artifact-list {
+      list-style: none;
+      padding: 0;
+      margin: 0.15rem 0 0;
+      display: grid;
+      gap: 0.35rem;
+      font-size: 0.68rem;
+      color: rgba(190, 214, 255, 0.7);
+    }
+
+    .artifact-list.hidden {
+      display: none;
+    }
+
+    .artifact-list li {
       display: flex;
-      gap: 0.8rem;
-      flex-wrap: wrap;
-      margin-top: -0.4rem;
+      gap: 0.4rem;
+      align-items: baseline;
+      background: rgba(0, 12, 32, 0.28);
+      border: 1px solid rgba(137, 187, 255, 0.07);
+      border-radius: 12px;
+      padding: 0.35rem 0.55rem;
     }
 
-    footer span::before {
-      content: '\2022';
-      margin: 0 0.45rem;
-      opacity: 0.35;
+    .artifact-list li span {
+      text-transform: uppercase;
+      letter-spacing: 0.08rem;
+      font-size: 0.58rem;
+      color: rgba(216, 235, 255, 0.6);
     }
 
-    footer span:first-child::before {
-      content: '';
+    .artifact-list li code {
+      font-family: "Space Grotesk", system-ui, sans-serif;
+      font-size: 0.72rem;
+      color: rgba(233, 245, 255, 0.88);
+      background: transparent;
+      padding: 0;
+    }
+
+    .step-note {
+      font-size: 0.72rem;
+      color: rgba(175, 204, 237, 0.6);
       margin: 0;
     }
 
-    @media (max-width: 980px) {
-      .shell { grid-template-columns: minmax(0, 1fr); }
-      .panel.brand-panel { order: 1; }
-      .panel.card-panel { order: 2; }
+    .hidden {
+      display: none !important;
     }
 
-    @media (max-width: 560px) {
-      body { padding: 1.6rem; }
-      .card, .brand { padding: 1.6rem; }
+    @media (max-width: 1080px) {
+      .hero-grid {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      }
+    }
+
+    @media (max-width: 920px) {
+      .hero-grid {
+        grid-template-columns: minmax(0, 1fr);
+        text-align: center;
+      }
+      .hero-copy {
+        align-items: center;
+      }
+      .hero-points {
+        align-items: center;
+      }
+      .hero-points li {
+        justify-content: center;
+      }
+      .hero-caption {
+        max-width: 22rem;
+      }
+      .hero-footnote {
+        text-align: center;
+      }
+    }
+
+    @media (max-width: 720px) {
+      body {
+        padding: 1.2rem;
+      }
+      .flow-grid {
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+      .hero {
+        padding: clamp(1.4rem, 5vw, 1.9rem);
+      }
+      .panel {
+        padding: clamp(1.4rem, 5vw, 1.9rem);
+      }
+    }
+
+    @media (max-width: 600px) {
+      .flow-grid {
+        grid-template-columns: 1fr;
+      }
+      .hero-caption {
+        max-width: 18rem;
+      }
+    }
+
+    @media (max-height: 780px) {
+      body {
+        align-items: flex-start;
+        padding-top: clamp(1rem, 4vh, 2rem);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .panel,
+      .hero-orb,
+      .hero-orb::before,
+      .hero-orb-core,
+      .nebula {
+        animation: none !important;
+      }
+      .panel {
+        transition: none !important;
+        opacity: 1;
+        transform: none;
+      }
     }
   </style>
 </head>
@@ -414,240 +684,399 @@
   <div class="nebula"></div>
   <div class="constellation"></div>
   <div class="shell">
-    <div class="panel brand-panel brand">
-      <div class="logo-badge"><span></span>ScanBass Studio</div>
-      <h1>Turn any track into a bassline MIDI.</h1>
-      <p class="tagline">Upload your audio — get the bassline as editable MIDI in seconds. Perfect for producers, remixers, and creators.</p>
-      <ul class="highlights">
-        <li>AI-powered bassline detection</li>
-        <li>Clean, DAW-ready MIDI output</li>
-        <li>Supports WAV &amp; MIDI uploads</li>
-      </ul>
-      <div class="spectrum" aria-hidden="true">
-        <span></span>
-        <span></span>
-        <span></span>
+    <section class="panel hero" style="--delay: 0s">
+      <div class="hero-grid">
+        <div class="hero-copy">
+          <div class="logo-badge"><span></span> ScanBass Studio</div>
+          <h1>Collab with ease.</h1>
+          <p class="tagline">You're one click away from your 808 in key. Drop a hook, we clip the first 30 seconds, and bounce the lowest notes back as a DAW-ready MIDI.</p>
+          <ul class="hero-points">
+            <li>Auto-preps a 30-second, 44.1&nbsp;kHz PCM16 clip tuned for Render CPU.</li>
+            <li>Transcribes the bassline only — no backups or filler artifacts.</li>
+            <li>Packs MIDI plus optional extras inside a single download.</li>
+          </ul>
+        </div>
+        <div class="hero-visual" aria-hidden="true">
+          <div class="hero-orb">
+            <div class="hero-orb-core"></div>
+          </div>
+          <p class="hero-caption">Lowest notes only • Render-friendly • Instant download</p>
+        </div>
       </div>
-      <footer>
-        <span>Tip: Drop the file, render the bassline, and import into Ableton, Logic, or FL Studio.</span>
-        <span>Best results: 16 kHz mono WAV, &lt; 30s</span>
-      </footer>
-    </div>
+      <p class="hero-footnote">Hyperglass UI, Render-friendly pipeline, and basslines that just work.</p>
+    </section>
 
-    <div class="panel card-panel card">
-      <form id="uploadForm">
-        <label id="dropzone" for="fileInput">
-          <input type="file" id="fileInput" accept=".wav,.mid,.midi" />
+    <div class="flow-grid">
+      <section class="panel step step-upload" style="--delay: 0.08s">
+        <h2><span>1</span>Drop your loop</h2>
+        <p class="step-copy">Drag in a hook, loop, or MIDI idea — we clip to 30 seconds and prep it for Render-friendly CPU.</p>
+        <form id="uploadForm">
+          <label id="dropzone" for="fileInput">
+            <input type="file" id="fileInput" accept=".wav,.mid,.midi" />
           <div id="dropLabel">
             <span class="icon">🎵</span>
             <span>Drag &amp; drop or click to upload</span>
           </div>
-          <small>ScanBass — extract and render only the bassline (WAV or MIDI in).</small>
+          <small>Only the first 30 seconds are processed. We create a local 44.1&nbsp;kHz PCM16 clip to stay accurate and light on CPU.</small>
         </label>
 
         <div class="mode-note">
           <strong>Poly mode</strong>
-          <span>We pick the lowest melodic line from your audio / MIDI.</span>
-          <span>Outputs a single bassline as standard MIDI.</span>
+          <span>We pick the lowest melodic line and bounce it to a single bassline MIDI.</span>
+          <span>Uploads longer than 30 s are silently clipped before resampling.</span>
         </div>
 
         <button type="submit" id="processBtn">Render MIDI</button>
       </form>
+      </section>
 
-      <div id="loader" class="loader hidden" role="status" aria-live="polite">
-        <div class="orbital"></div>
-        <p id="loaderText">Analyzing spectral fingerprints…</p>
-      </div>
+      <section class="panel step step-progress" style="--delay: 0.16s">
+        <h2><span>2</span>See the progress</h2>
+        <p class="step-copy">Watch status updates while we trim, resample, and transcribe the lowest notes.</p>
+        <div id="loader" class="loader hidden" role="status" aria-live="polite">
+          <div class="orbital"></div>
+          <p id="loaderText">Preparing upload…</p>
+        </div>
+        <div id="status" class="status" aria-live="polite">Waiting for your upload.</div>
+      </section>
 
-      <div id="status" class="status" aria-live="polite"></div>
-
-      <div id="downloadCard" class="download-card hidden">
-        <h2>MIDI Ready</h2>
-        <div id="midiDownload" class="download"></div>
-      </div>
+      <section class="panel step step-download" style="--delay: 0.24s">
+        <h2><span>3</span>Download the bassline</h2>
+        <p class="step-copy">Grab the bassline MIDI plus any extras as soon as packaging finishes.</p>
+        <p id="downloadHint" class="step-note">Results unlock here once transcription completes.</p>
+        <div id="downloadCard" class="download-card hidden">
+          <h3>MIDI ready</h3>
+          <div id="midiDownload" class="download"></div>
+          <ul id="artifactList" class="artifact-list hidden" aria-live="polite"></ul>
+        </div>
+      </section>
     </div>
   </div>
 
   <script>
     const API_BASE = "https://scanbass-backend.onrender.com";
+    const LIMIT_SECONDS = 30;
     const form = document.getElementById("uploadForm");
     const dropzone = document.getElementById("dropzone");
     const fileInput = document.getElementById("fileInput");
+    const processBtn = document.getElementById("processBtn");
     const loader = document.getElementById("loader");
+    const loaderText = document.getElementById("loaderText");
     const statusDiv = document.getElementById("status");
     const downloadCard = document.getElementById("downloadCard");
     const midiDownload = document.getElementById("midiDownload");
+    const artifactList = document.getElementById("artifactList");
+    const downloadHint = document.getElementById("downloadHint");
+
     let currentDownloadUrl = null;
     let lastUploadedName = null;
+    let currentPollAbort = null;
 
     const statusBadge = document.createElement("span");
     statusBadge.className = "badge";
 
     function setStatus(message, badge = "") {
       statusDiv.textContent = "";
-      if (!message) return;
+      if (!message) {
+        return;
+      }
       if (badge) {
         statusBadge.textContent = badge;
-        const badgeClone = statusBadge.cloneNode(true);
-        statusDiv.appendChild(badgeClone);
+        const clone = statusBadge.cloneNode(true);
+        statusDiv.appendChild(clone);
       }
       statusDiv.append(message);
     }
 
-    ["dragenter", "dragover", "dragleave", "drop"].forEach(ev => {
-      dropzone.addEventListener(ev, e => {
-        e.preventDefault();
-        e.stopPropagation();
+    function updateLoaderMessage(message) {
+      if (message) {
+        loaderText.textContent = message;
+      }
+    }
+
+    function showLoader(message) {
+      updateLoaderMessage(message);
+      loader.classList.remove("hidden");
+    }
+
+    function hideLoader() {
+      loader.classList.add("hidden");
+    }
+
+    function resetDownloadCard() {
+      if (currentDownloadUrl) {
+        URL.revokeObjectURL(currentDownloadUrl);
+        currentDownloadUrl = null;
+      }
+      midiDownload.innerHTML = "";
+      downloadCard.classList.add("hidden");
+      artifactList.innerHTML = "";
+      artifactList.classList.add("hidden");
+      downloadHint?.classList.remove("hidden");
+    }
+
+    function describeDownload(name) {
+      return (name || "").toLowerCase().endsWith(".zip")
+        ? "ZIP includes trimmed clip, isolated bass, and MIDI"
+        : "DAW-ready MIDI";
+    }
+
+    function renderArtifacts(artifacts) {
+      if (!artifacts || typeof artifacts !== "object") {
+        artifactList.innerHTML = "";
+        artifactList.classList.add("hidden");
+        return;
+      }
+      const entries = Object.entries(artifacts);
+      if (!entries.length) {
+        artifactList.innerHTML = "";
+        artifactList.classList.add("hidden");
+        return;
+      }
+      artifactList.innerHTML = entries
+        .map(([key, value]) => {
+          const label = key.replace(/_/g, " ");
+          const file = (value || "").split(/[\\/]/).pop();
+          return `<li><span>${label}</span><code>${file || "…"}</code></li>`;
+        })
+        .join("");
+      artifactList.classList.remove("hidden");
+    }
+
+    function showDownload(blob, downloadName, artifacts) {
+      if (currentDownloadUrl) {
+        URL.revokeObjectURL(currentDownloadUrl);
+      }
+      currentDownloadUrl = URL.createObjectURL(blob);
+      midiDownload.innerHTML = `<a href="${currentDownloadUrl}" download="${downloadName}">⬇️ Download ${downloadName}</a><span>${describeDownload(downloadName)}</span>`;
+      downloadHint?.classList.add("hidden");
+      downloadCard.classList.remove("hidden");
+      renderArtifacts(artifacts);
+    }
+
+    function cancelPolling() {
+      if (currentPollAbort) {
+        currentPollAbort.abort();
+        currentPollAbort = null;
+      }
+    }
+
+    function getFileStem(filename) {
+      if (!filename) return "input";
+      const base = filename.split(/[\\/]/).pop() || filename;
+      const dot = base.lastIndexOf(".");
+      return dot > 0 ? base.slice(0, dot) : base;
+    }
+
+    function fallbackDownloadName(jobId, originalName) {
+      if (jobId) {
+        return `${jobId}.zip`;
+      }
+      return `scanbass_${getFileStem(originalName)}.zip`;
+    }
+
+    function extractFileName(response, jobId, originalName) {
+      const header = response.headers.get("content-disposition") || "";
+      let match = header.match(/filename\*=UTF-8''([^;]+)/i);
+      if (match && match[1]) {
+        const cleaned = match[1].replace(/"/g, "");
+        try {
+          return decodeURIComponent(cleaned);
+        } catch (_) {
+          return cleaned;
+        }
+      }
+      match = header.match(/filename="?([^";]+)"?/i);
+      if (match && match[1]) {
+        return match[1];
+      }
+      return fallbackDownloadName(jobId, originalName);
+    }
+
+    function delay(ms, signal) {
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          signal?.removeEventListener("abort", onAbort);
+          resolve();
+        }, ms);
+
+        function onAbort() {
+          clearTimeout(timer);
+          signal?.removeEventListener("abort", onAbort);
+          reject(new DOMException("Aborted", "AbortError"));
+        }
+
+        if (signal) {
+          if (signal.aborted) {
+            onAbort();
+            return;
+          }
+          signal.addEventListener("abort", onAbort, { once: true });
+        }
+      }).catch(err => {
+        if (err.name === "AbortError") {
+          return;
+        }
+        throw err;
+      });
+    }
+
+    async function pollJob(jobId) {
+      cancelPolling();
+      const abort = new AbortController();
+      currentPollAbort = abort;
+
+      try {
+        while (!abort.signal.aborted) {
+          const resp = await fetch(`${API_BASE}/jobs/${encodeURIComponent(jobId)}`, {
+            signal: abort.signal,
+            headers: { Accept: "application/json" }
+          });
+          if (!resp.ok) {
+            throw new Error(`Status ${resp.status}`);
+          }
+
+          const job = await resp.json();
+
+          if (job.status === "queued") {
+            showLoader(`Preparing ${LIMIT_SECONDS} s clip at 44.1 kHz…`);
+            setStatus("Queued — trimming upload for analysis.", "⏳");
+          } else if (job.status === "running") {
+            showLoader("Isolating bass and transcribing MIDI…");
+            setStatus("Transcribing bassline…", "●");
+          } else if (job.status === "failed") {
+            hideLoader();
+            setStatus(`Failed: ${job.error || "unknown error"}`, "✖");
+            processBtn.disabled = false;
+            break;
+          } else if (job.status === "succeeded") {
+            await finalizeJob(jobId, job);
+            break;
+          } else {
+            setStatus(`Status: ${job.status}`, "ℹ️");
+          }
+
+          await delay(1500, abort.signal);
+        }
+      } catch (error) {
+        if (abort.signal.aborted) {
+          return;
+        }
+        console.error(error);
+        hideLoader();
+        setStatus(`Error while polling job: ${error.message}`, "!");
+        processBtn.disabled = false;
+      } finally {
+        if (currentPollAbort === abort) {
+          currentPollAbort = null;
+        }
+      }
+    }
+
+    async function finalizeJob(jobId, job) {
+      showLoader("Packaging bassline and MIDI…");
+      setStatus("Packaging outputs…", "⬇️");
+      try {
+        const resp = await fetch(`${API_BASE}/jobs/${encodeURIComponent(jobId)}/download`);
+        if (!resp.ok) {
+          throw new Error(`Download failed (${resp.status})`);
+        }
+        const blob = await resp.blob();
+        const name = extractFileName(resp, jobId, lastUploadedName);
+        showDownload(blob, name, job.artifacts);
+        setStatus("Bassline MIDI ready to download.", "⬇️");
+      } catch (error) {
+        console.error(error);
+        setStatus(`Could not download results: ${error.message}`, "!");
+      } finally {
+        hideLoader();
+        processBtn.disabled = false;
+      }
+    }
+
+    ["dragenter", "dragover", "dragleave", "drop"].forEach(eventName => {
+      dropzone.addEventListener(eventName, event => {
+        event.preventDefault();
+        event.stopPropagation();
       });
     });
 
-    ["dragenter", "dragover"].forEach(ev => {
-      dropzone.addEventListener(ev, () => dropzone.classList.add("active"));
+    ["dragenter", "dragover"].forEach(eventName => {
+      dropzone.addEventListener(eventName, () => dropzone.classList.add("active"));
     });
 
-    ["dragleave", "drop"].forEach(ev => {
-      dropzone.addEventListener(ev, () => dropzone.classList.remove("active"));
+    ["dragleave", "drop"].forEach(eventName => {
+      dropzone.addEventListener(eventName, () => dropzone.classList.remove("active"));
     });
 
-    dropzone.addEventListener("drop", e => {
-      const file = e.dataTransfer.files[0];
+    dropzone.addEventListener("drop", event => {
+      const file = event.dataTransfer?.files?.[0];
       if (file) {
-        fileInput.files = e.dataTransfer.files;
-        updateDropLabel(file.name);
+        fileInput.files = event.dataTransfer.files;
         lastUploadedName = file.name;
+        updateDropLabel(file.name);
       }
     });
 
     fileInput.addEventListener("change", () => {
       if (fileInput.files.length > 0) {
-        updateDropLabel(fileInput.files[0].name);
-        lastUploadedName = fileInput.files[0].name;
+        const name = fileInput.files[0].name;
+        lastUploadedName = name;
+        updateDropLabel(name);
       }
     });
 
     function updateDropLabel(filename) {
       const label = document.getElementById("dropLabel");
       label.innerHTML = `<span class="icon">✅</span><span>${filename}</span>`;
+      setStatus(`Only the first ${LIMIT_SECONDS} seconds will be analyzed.`, "ℹ️");
     }
 
-    form.addEventListener("submit", async e => {
-      e.preventDefault();
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
       const file = fileInput.files[0];
       if (!file) {
         setStatus("Please select a file.", "!");
         return;
       }
 
+      processBtn.disabled = true;
+      showLoader("Uploading clip…");
+      setStatus("Uploading trimmed clip…", "↑");
+      resetDownloadCard();
+      cancelPolling();
+
       const fd = new FormData();
       fd.append("file", file);
-      // backend si stejně pole "mode" ignoruje, ale můžeme mu ho tam nechat
       fd.append("mode", "poly");
-
-      loader.classList.remove("hidden");
-      setStatus("Uploading to ScanBass…", "↑");
-      downloadCard.classList.add("hidden");
-      if (currentDownloadUrl) {
-        URL.revokeObjectURL(currentDownloadUrl);
-        currentDownloadUrl = null;
-      }
-      midiDownload.innerHTML = "";
 
       try {
         const resp = await fetch(`${API_BASE}/jobs`, { method: "POST", body: fd });
+        if (!resp.ok) {
+          const detail = await resp.text();
+          throw new Error(detail || `HTTP ${resp.status}`);
+        }
         const data = await resp.json();
         if (!data.job_id) {
-          loader.classList.add("hidden");
-          setStatus("Could not start the job.", "!");
-          return;
+          throw new Error("Missing job id from backend");
         }
-        const jobId = data.job_id;
-        setStatus("Analyzing audio…", "●");
 
-        // polling – backend při "done" pošle přímo MIDI stream
-        const poll = setInterval(async () => {
-          try {
-            const r = await fetch(`${API_BASE}/jobs/${encodeURIComponent(jobId)}`);
-            const ct = r.headers.get("content-type") || "";
-
-            // 1) backend ještě zpracovává → JSON
-            if (ct.includes("application/json")) {
-              const job = await r.json();
-              if (job.status === "processing") {
-                setStatus("Processing…", "●");
-                return;
-              }
-              if (job.status === "error") {
-                clearInterval(poll);
-                loader.classList.add("hidden");
-                setStatus(`Failed: ${job.error || "unknown error"}`, "✖");
-                return;
-              }
-              // fallback: kdyby někdy přišel JSON s done
-              if (job.status === "done" && job.midi_base64) {
-                clearInterval(poll);
-                loader.classList.add("hidden");
-                const blob = b64toBlob(job.midi_base64, "audio/midi");
-                showDownload(blob, lastUploadedName);
-                setStatus("MIDI is ready to download.", "⬇️");
-                return;
-              }
-              return;
-            }
-
-            // 2) jinak je to binární odpověď → hotovo
-            clearInterval(poll);
-            const blob = await r.blob();
-            loader.classList.add("hidden");
-            showDownload(blob, lastUploadedName);
-            setStatus("MIDI is ready to download.", "⬇️");
-          } catch (err) {
-            clearInterval(poll);
-            loader.classList.add("hidden");
-            setStatus("Error while fetching job status.", "!");
-          }
-        }, 1500);
-      } catch (err) {
-        console.error(err);
-        loader.classList.add("hidden");
-        setStatus(`Error: ${err.message}`, "!");
+        showLoader(`Preparing ${LIMIT_SECONDS} s clip at 44.1 kHz…`);
+        setStatus("Queued — trimming upload for analysis.", "⏳");
+        pollJob(data.job_id);
+      } catch (error) {
+        console.error(error);
+        hideLoader();
+        setStatus(`Error: ${error.message}`, "!");
+        processBtn.disabled = false;
       }
     });
-
-    function showDownload(blob, originalName) {
-      if (currentDownloadUrl) {
-        URL.revokeObjectURL(currentDownloadUrl);
-      }
-      currentDownloadUrl = URL.createObjectURL(blob);
-
-      let base = "output";
-      if (originalName) {
-        base = originalName.split(".")[0];
-      }
-      const downloadName = `scanbass_${base}.mid`;
-
-      midiDownload.innerHTML = `<a href="${currentDownloadUrl}" download="${downloadName}">⬇️ Download ${downloadName}</a><span>DAW-ready MIDI</span>`;
-      downloadCard.classList.remove("hidden");
-    }
-
-    function b64toBlob(b64, contentType = "", sliceSize = 512) {
-      const byteCharacters = atob(b64);
-      const byteArrays = [];
-      for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
-        const slice = byteCharacters.slice(offset, offset + sliceSize);
-        const byteNumbers = new Array(slice.length);
-        for (let i = 0; i < slice.length; i++) {
-          byteNumbers[i] = slice.charCodeAt(i);
-        }
-        const byteArray = new Uint8Array(byteNumbers);
-        byteArrays.push(byteArray);
-      }
-      return new Blob(byteArrays, { type: contentType });
-    }
 
     window.addEventListener("beforeunload", () => {
       if (currentDownloadUrl) {
         URL.revokeObjectURL(currentDownloadUrl);
       }
+      cancelPolling();
     });
   </script>
 </body>
