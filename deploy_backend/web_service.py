@@ -113,6 +113,7 @@ class HeavyBassTranscriber(BaseBassTranscriber):
         self.fmax = librosa.note_to_hz("C5")
         self._demucs_model = None
         self._crepe_loaded = False
+        self._crepe_device: str | None = None
 
     def warmup(self) -> None:
         silence = np.zeros(int(self.crepe_sample_rate), dtype=np.float32)
@@ -129,7 +130,9 @@ class HeavyBassTranscriber(BaseBassTranscriber):
     def _ensure_crepe(self) -> None:
         if not self._crepe_loaded:
             device_str = str(self.device)
-            self.torchcrepe.load.model("full", device=device_str)
+            # robustní varianta – jen keyword `device=...`
+            self.torchcrepe.load.model(device=device_str, capacity="full")
+            self._crepe_device = device_str
             self._crepe_loaded = True
 
     # Processing --------------------------------------------------------
@@ -186,7 +189,7 @@ class HeavyBassTranscriber(BaseBassTranscriber):
                 model="full",
                 batch_size=128,
                 return_periodicity=True,
-                device=str(self.device),
+                device=self._crepe_device or str(self.device),
             )
 
         pitches = f0[0].cpu().numpy()
@@ -427,7 +430,7 @@ def load_audio_bytes(data: bytes, filename: str) -> Tuple[np.ndarray, int]:
     try:
         import torchaudio
     except ImportError as exc:
-        raise ValueError("Audio decoding failed and torchaudio is not available.") from exc
+            raise ValueError("Audio decoding failed and torchaudio is not available.") from exc
 
     buffer = io.BytesIO(data)
     buffer.seek(0)
