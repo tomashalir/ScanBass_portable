@@ -74,12 +74,18 @@
     }
 
     .shell {
-      width: min(1080px, 94vw);
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: clamp(1.4rem, 3.4vw, 2.4rem);
+      width: min(1120px, 96vw);
+      display: flex;
+      flex-direction: column;
+      gap: clamp(2rem, 4vw, 3.6rem);
       position: relative;
       z-index: 1;
+    }
+
+    .workflow {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: clamp(1.8rem, 3vw, 2.6rem);
     }
 
     .panel {
@@ -200,8 +206,8 @@
 
     .tagline {
       margin: 0;
-      font-size: clamp(0.98rem, 2.2vw, 1.08rem);
-      line-height: 1.55;
+      font-size: 1rem;
+      line-height: 1.6;
       color: var(--muted);
       max-width: 32rem;
     }
@@ -265,49 +271,11 @@
       animation: breathe 14s ease-in-out infinite;
     }
 
-    .hero-orb::before {
-      content: '';
-      position: absolute;
-      inset: 12%;
-      border-radius: 50%;
-      border: 1px solid rgba(255, 255, 255, 0.18);
-      filter: blur(0.3px);
-      opacity: 0.8;
-      animation: orbit 18s linear infinite;
-    }
-
-    .hero-orb::after {
-      content: '';
-      position: absolute;
-      inset: 30% 10% 10% 30%;
-      border-radius: 50% / 60%;
-      background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.35), transparent 60%);
-      opacity: 0.7;
-      transform: rotate(-12deg);
-    }
-
-    .hero-orb-core {
-      width: 54%;
-      aspect-ratio: 1 / 1;
-      border-radius: 50%;
-      background: radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.9), rgba(0, 209, 255, 0.2) 55%, rgba(0, 0, 0, 0) 70%);
-      box-shadow: 0 0 26px rgba(0, 209, 255, 0.4);
-      animation: glimmer 5.5s ease-in-out infinite;
-    }
-
-    .hero-caption {
-      margin: 0;
-      font-size: 0.74rem;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: rgba(196, 218, 255, 0.58);
-    }
-
     .step {
-      padding: clamp(1.6rem, 2.4vw, 2.05rem);
+      padding: clamp(1.65rem, 2.8vw, 2.1rem);
       display: flex;
       flex-direction: column;
-      gap: 1.1rem;
+      gap: 1.2rem;
     }
 
     .step h2 {
@@ -436,16 +404,6 @@
     #processBtn::after {
       content: '→';
       opacity: 0.85;
-    }
-
-    #processBtn:not([disabled]):hover {
-      transform: translateY(-3px);
-      box-shadow: 0 20px 40px rgba(0, 209, 255, 0.35);
-    }
-
-    #processBtn:not([disabled]):active {
-      transform: translateY(-1px);
-      box-shadow: 0 12px 26px rgba(0, 209, 255, 0.32);
     }
 
     #processBtn[disabled] {
@@ -593,61 +551,46 @@
       display: none !important;
     }
 
-    @media (max-width: 1080px) {
-      .shell {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
+    footer {
+      font-size: 0.72rem;
+      color: rgba(175, 204, 237, 0.52);
+      display: flex;
+      gap: 0.4rem;
+      align-items: baseline;
+      background: rgba(0, 12, 32, 0.28);
+      border: 1px solid rgba(137, 187, 255, 0.07);
+      border-radius: 12px;
+      padding: 0.35rem 0.55rem;
     }
 
-    @media (max-width: 720px) {
-      body { padding: 1.4rem; }
-      .shell {
-        grid-template-columns: 1fr;
-        gap: 1.4rem;
-      }
-      .hero {
-        text-align: center;
-      }
-      .hero-copy {
-        align-items: center;
-      }
-      .hero-copy h1 {
-        font-size: clamp(2rem, 8vw, 2.5rem);
-      }
-      .hero-visual {
-        min-width: 0;
-      }
-      .hero-orb {
-        width: min(220px, 60vw);
-      }
-      .hero-points {
-        align-items: center;
-      }
-      .hero-points li {
-        justify-content: center;
-      }
-      .hero-footnote {
-        letter-spacing: 0.08em;
-      }
-      .panel:hover,
-      .panel:focus-within {
-        transform: translate3d(0, -4px, 0) scale(1.005);
-      }
+    .artifact-list li span {
+      text-transform: uppercase;
+      letter-spacing: 0.08rem;
+      font-size: 0.58rem;
+      color: rgba(216, 235, 255, 0.6);
     }
 
-    @media (prefers-reduced-motion: reduce) {
-      .panel,
-      .hero-orb,
-      .hero-orb::before,
-      .hero-orb-core,
-      .nebula {
-        animation: none !important;
-      }
-      .panel {
-        transition: none !important;
-        opacity: 1;
-        transform: none;
-      }
+    .artifact-list li code {
+      font-family: "Space Grotesk", system-ui, sans-serif;
+      font-size: 0.72rem;
+      color: rgba(233, 245, 255, 0.88);
+      background: transparent;
+      padding: 0;
+    }
+
+    .step-note {
+      font-size: 0.72rem;
+      color: rgba(175, 204, 237, 0.6);
+      margin: 0;
+    }
+
+    @media (max-width: 980px) {
+      .workflow { grid-template-columns: minmax(0, 1fr); }
+    }
+
+    @media (max-width: 560px) {
+      body { padding: 1.6rem; }
+      .step, .brand { padding: 1.6rem; }
     }
   </style>
 </head>
@@ -655,69 +598,72 @@
   <div class="nebula"></div>
   <div class="constellation"></div>
   <div class="shell">
-    <section class="panel hero" style="--delay: 0s">
-      <div class="hero-copy">
-        <div class="logo-badge"><span></span>Scanbass Studio</div>
-        <h1>Collab with ease.</h1>
-        <p class="tagline">You’re one click away from your 808 in key. Drop up to 30 seconds — we prep it for Render’s CPU, isolate the lowest notes, and hand back DAW-ready MIDI.</p>
-        <ul class="hero-points">
-          <li>Auto-trims the first 30 seconds for Render-friendly jobs</li>
-          <li>Resamples to clean 44.1&nbsp;kHz PCM16 before transcription</li>
-          <li>Returns the bassline MIDI plus optional bonus artifacts</li>
-        </ul>
-        <p class="hero-footnote">Bounce your hook or intro. Anything past 30 seconds is ignored.</p>
+    <section class="panel brand-panel brand">
+      <div class="logo-badge"><span></span>ScanBass Studio</div>
+      <h1>Collab with ease.</h1>
+      <p class="tagline">You are one click away from your 808 in key. Drop up to 30 seconds of audio and we resample, isolate the lowest line, and hand back a DAW-ready MIDI.</p>
+      <ul class="highlights">
+        <li>Auto trims to the first 30&nbsp;s to stay under 1 Render CPU</li>
+        <li>Finds the lowest melodic line for instant basslines</li>
+        <li>Packs MIDI plus optional stems inside a single download</li>
+      </ul>
+      <div class="spectrum" aria-hidden="true">
+        <span></span>
+        <span></span>
+        <span></span>
       </div>
-      <div class="hero-visual" aria-hidden="true">
-        <div class="hero-orb">
-          <div class="hero-orb-core"></div>
-        </div>
-        <p class="hero-caption">Lowest notes only • Render-friendly • Instant download</p>
-      </div>
+      <footer>
+        <span>Tip: Bounce your hook or intro — only the first 30 seconds are analyzed.</span>
+        <span>Uploads convert into a 44.1&nbsp;kHz PCM16 clip for accurate scanning.</span>
+      </footer>
     </section>
 
-    <section class="panel step step-upload" style="--delay: 0.08s">
-      <h2><span>1</span>Drop your loop</h2>
-      <p class="step-copy">Drag in a hook, loop, or MIDI idea — we clip to 30 seconds and prep it for Render-friendly CPU.</p>
-      <form id="uploadForm">
-        <label id="dropzone" for="fileInput">
-          <input type="file" id="fileInput" accept=".wav,.mid,.midi" />
-          <div id="dropLabel">
-            <span class="icon">🎵</span>
-            <span>Drag &amp; drop or click to upload</span>
+    <div class="workflow">
+      <section class="panel step step-upload">
+        <h2><span>1</span>Drop your loop</h2>
+        <p class="step-copy">Drag in a hook, loop, or bass idea — we automatically trim to 30 seconds and normalize for Render-friendly CPU use.</p>
+        <form id="uploadForm">
+          <label id="dropzone" for="fileInput">
+            <input type="file" id="fileInput" accept=".wav,.mid,.midi" />
+            <div id="dropLabel">
+              <span class="icon">🎵</span>
+              <span>Drag &amp; drop or click to upload</span>
+            </div>
+            <small>Only the first 30 seconds are processed. We create a local 44.1&nbsp;kHz PCM16 clip to keep scanning accurate and CPU-friendly.</small>
+          </label>
+
+          <div class="mode-note">
+            <strong>Poly mode</strong>
+            <span>We pick the lowest melodic line from your audio / MIDI.</span>
+            <span>Outputs a single bassline as standard MIDI.</span>
+            <span>Uploads longer than 30 s are automatically truncated after preparation.</span>
           </div>
-          <small>Only the first 30 seconds are processed. We create a local 44.1&nbsp;kHz PCM16 clip to stay accurate and light on CPU.</small>
-        </label>
 
-        <div class="mode-note">
-          <strong>Poly mode</strong>
-          <span>We pick the lowest melodic line and bounce it to a single bassline MIDI.</span>
-          <span>Uploads longer than 30 s are silently clipped before resampling.</span>
+          <button type="submit" id="processBtn">Render MIDI</button>
+        </form>
+      </section>
+
+      <section class="panel step step-progress">
+        <h2><span>2</span>See the progress</h2>
+        <p class="step-copy">Once uploaded we trim, resample, and transcribe the lowest notes. Status updates land here while the job stays queued or running.</p>
+        <div id="loader" class="loader hidden" role="status" aria-live="polite">
+          <div class="orbital"></div>
+          <p id="loaderText">Preparing upload…</p>
         </div>
+        <div id="status" class="status" aria-live="polite">Waiting for your upload.</div>
+      </section>
 
-        <button type="submit" id="processBtn">Render MIDI</button>
-      </form>
-    </section>
-
-    <section class="panel step step-progress" style="--delay: 0.16s">
-      <h2><span>2</span>See the progress</h2>
-      <p class="step-copy">Watch status updates while we trim, resample, and transcribe the lowest notes.</p>
-      <div id="loader" class="loader hidden" role="status" aria-live="polite">
-        <div class="orbital"></div>
-        <p id="loaderText">Preparing upload…</p>
-      </div>
-      <div id="status" class="status" aria-live="polite">Waiting for your upload.</div>
-    </section>
-
-    <section class="panel step step-download" style="--delay: 0.24s">
-      <h2><span>3</span>Download the bassline</h2>
-      <p class="step-copy">Grab the bassline MIDI plus any extras as soon as packaging finishes.</p>
-      <p id="downloadHint" class="step-note">Results unlock here once transcription completes.</p>
-      <div id="downloadCard" class="download-card hidden">
-        <h3>MIDI ready</h3>
-        <div id="midiDownload" class="download"></div>
-        <ul id="artifactList" class="artifact-list hidden" aria-live="polite"></ul>
-      </div>
-    </section>
+      <section class="panel step step-download">
+        <h2><span>3</span>Download the bassline</h2>
+        <p class="step-copy">When we finish packaging, grab the bassline MIDI along with any extra artifacts generated from the scan.</p>
+        <p id="downloadHint" class="step-note">Results will unlock here once the transcription completes.</p>
+        <div id="downloadCard" class="download-card hidden">
+          <h3>MIDI ready</h3>
+          <div id="midiDownload" class="download"></div>
+          <ul id="artifactList" class="artifact-list hidden" aria-live="polite"></ul>
+        </div>
+      </section>
+    </div>
   </div>
 
   <script>
