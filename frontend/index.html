@@ -109,6 +109,7 @@
       border-color: rgba(0, 209, 255, 0.28);
     }
 
+    /* === breathing orb – vrstvená verze === */
     .hero-orb {
       position: relative;
       width: clamp(200px, 28vw, 280px);
@@ -252,9 +253,9 @@
       }
     }
 
+    /* jemný dech + hue shift */
     @keyframes breathe {
-      0%,
-      100% {
+      0%, 100% {
         transform: scale(0.95);
         filter: hue-rotate(0deg);
       }
@@ -295,6 +296,7 @@
               You are one click away from your 808 in key. Drop up to 30 seconds of audio and we resample, isolate the lowest line, and hand back a DAW-ready MIDI.
             </p>
           </div>
+          <!-- nové value bullets -->
           <ul class="w-full max-w-xl space-y-3 text-left text-sm text-slate-200/80">
             <li class="flex items-start gap-3 leading-relaxed">
               <span class="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-cyan-300/80 shadow-[0_0_10px_rgba(34,211,238,0.6)]"></span>
@@ -315,6 +317,7 @@
           </div>
         </div>
         <div class="flex w-full items-center justify-center">
+          <!-- breathing orb -->
           <div class="hero-orb">
             <div class="orb-layer orb-outer"></div>
             <div class="orb-layer orb-middle"></div>
