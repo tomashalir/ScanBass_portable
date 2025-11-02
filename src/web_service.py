@@ -14,6 +14,7 @@ if str(ROOT) not in sys.path:
 import asyncio
 import logging
 import os
+from typing import Tuple
 
 PORT_ENV = os.getenv("PORT")
 if PORT_ENV and "SCANBASS_PORT" not in os.environ:
@@ -24,6 +25,9 @@ import uuid
 from dataclasses import dataclass, field, asdict as dataclass_asdict
 from typing import Dict, Literal, Optional
 
+import librosa
+import numpy as np
+import soundfile as sf
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -36,6 +40,10 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_OUTPUT_ROOT = Path(os.getenv("SCANBASS_OUTPUT_ROOT", "outputs")).resolve()
 DEFAULT_OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+
+MAX_UPLOAD_DURATION_S = 30.0
+TARGET_SAMPLE_RATE = 44100
+TRIMMED_UPLOAD_NAME = "input_30s.wav"
 
 @dataclass
 class JobState:
@@ -75,6 +83,44 @@ app.add_middleware(
 JOB_LOCK = asyncio.Lock()
 JOBS: Dict[str, JobState] = {}
 
+def _load_and_trim_audio(path: Path) -> Tuple[np.ndarray, int]:
+    """Load at most MAX_UPLOAD_DURATION_S seconds of audio and return mono/stereo float32."""
+    try:
+        audio, sr = librosa.load(
+            str(path),
+            sr=TARGET_SAMPLE_RATE,
+            mono=False,
+            duration=MAX_UPLOAD_DURATION_S,
+        )
+    except Exception as exc:  # pragma: no cover - runtime guard
+        raise HTTPException(status_code=400, detail=f"Failed to decode audio: {exc}") from exc
+
+    if audio.ndim == 1:
+        audio = audio[np.newaxis, :]
+
+    # Ensure (samples, channels)
+    audio = np.transpose(audio).astype(np.float32, copy=False)
+    return audio, sr
+
+
+def _prepare_upload(path: Path) -> Path:
+    """Convert the uploaded audio to a 30 s WAV clip for downstream processing."""
+    audio, sr = _load_and_trim_audio(path)
+    trimmed_path = path.with_name(TRIMMED_UPLOAD_NAME)
+    try:
+        sf.write(trimmed_path, audio, sr)
+    except Exception as exc:  # pragma: no cover - runtime guard
+        raise HTTPException(status_code=500, detail=f"Failed to write temp audio: {exc}") from exc
+
+    if trimmed_path != path:
+        try:
+            path.unlink()
+        except OSError:
+            pass
+
+    return trimmed_path
+
+
 def _save_upload(upload: UploadFile) -> Path:
     suffix = Path(upload.filename or "input.wav").suffix or ".wav"
     temp_dir = Path(tempfile.mkdtemp(prefix="scanbass_"))
@@ -82,7 +128,10 @@ def _save_upload(upload: UploadFile) -> Path:
     with temp_path.open("wb") as f:
         shutil.copyfileobj(upload.file, f)
     upload.file.close()
-    return temp_path
+    prepared_path = _prepare_upload(temp_path)
+    if prepared_path.name != TRIMMED_UPLOAD_NAME:
+        logger.debug("Prepared upload renamed to %s", prepared_path)
+    return prepared_path
 
 def _make_job_id(input_name: str, mode: str) -> str:
     stem = Path(input_name).stem or "input"
