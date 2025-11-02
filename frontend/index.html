@@ -109,33 +109,46 @@
       border-color: rgba(0, 209, 255, 0.28);
     }
 
+    /* === breathing orb – vrstvená verze === */
     .hero-orb {
-      width: clamp(220px, 26vw, 260px);
+      position: relative;
+      width: clamp(200px, 28vw, 280px);
       aspect-ratio: 1 / 1;
       border-radius: 50%;
-      position: relative;
-      overflow: hidden;
-      box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.32), 0 26px 70px rgba(12, 34, 88, 0.6);
-      animation: breathe 16s ease-in-out infinite;
+      overflow: visible;
+      filter: drop-shadow(0 0 55px rgba(56, 189, 248, 0.35));
     }
 
-    .hero-orb::before {
-      content: '';
+    .hero-orb .orb-layer {
       position: absolute;
-      inset: -20%;
-      background: conic-gradient(from 90deg, rgba(0, 209, 255, 0.18), transparent 40%, rgba(255, 96, 255, 0.24));
-      filter: blur(24px);
-      animation: orbit 18s linear infinite;
+      inset: 0;
+      border-radius: 9999px;
+      animation: breathe 7s ease-in-out infinite;
     }
 
-    .hero-orb::after {
-      content: '';
-      position: absolute;
-      inset: 18%;
-      border-radius: 50%;
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      box-shadow: inset 0 0 18px rgba(255, 255, 255, 0.12);
-      opacity: 0.8;
+    .hero-orb .orb-outer {
+      background: radial-gradient(circle, rgba(59, 130, 246, 0.18), rgba(17, 24, 39, 0));
+      animation-delay: 0s;
+    }
+
+    .hero-orb .orb-middle {
+      inset: 12%;
+      background: radial-gradient(circle, rgba(94, 234, 212, 0.35), rgba(15, 23, 42, 0));
+      animation-delay: 0.3s;
+    }
+
+    .hero-orb .orb-inner {
+      inset: 24%;
+      background: radial-gradient(circle, rgba(139, 92, 246, 0.75), rgba(15, 23, 42, 0));
+      animation-delay: 0.6s;
+      box-shadow: inset 0 0 25px rgba(248, 250, 255, 0.18);
+    }
+
+    @media (max-width: 640px) {
+      .hero-orb {
+        width: clamp(160px, 55vw, 220px);
+        margin: 0 auto;
+      }
     }
 
     #dropzone {
@@ -240,13 +253,15 @@
       }
     }
 
+    /* jemný dech + hue shift */
     @keyframes breathe {
-      0%,
-      100% {
-        transform: scale(1) translate3d(0, 0, 0);
+      0%, 100% {
+        transform: scale(0.95);
+        filter: hue-rotate(0deg);
       }
       50% {
-        transform: scale(1.04) translate3d(0, -10px, 0);
+        transform: scale(1.05);
+        filter: hue-rotate(15deg);
       }
     }
 
@@ -281,18 +296,19 @@
               You are one click away from your 808 in key. Drop up to 30 seconds of audio and we resample, isolate the lowest line, and hand back a DAW-ready MIDI.
             </p>
           </div>
+          <!-- nové value bullets -->
           <ul class="w-full max-w-xl space-y-3 text-left text-sm text-slate-200/80">
             <li class="flex items-start gap-3 leading-relaxed">
               <span class="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-cyan-300/80 shadow-[0_0_10px_rgba(34,211,238,0.6)]"></span>
-              <span>Auto trims to the first 30&nbsp;s to stay under 1 Render CPU</span>
+              <span>Instantly turn your melody into a perfect bassline.</span>
             </li>
             <li class="flex items-start gap-3 leading-relaxed">
               <span class="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-cyan-300/80 shadow-[0_0_10px_rgba(34,211,238,0.6)]"></span>
-              <span>Finds the lowest melodic line for instant basslines</span>
+              <span>Get clean, DAW-ready MIDI in seconds.</span>
             </li>
             <li class="flex items-start gap-3 leading-relaxed">
               <span class="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-cyan-300/80 shadow-[0_0_10px_rgba(34,211,238,0.6)]"></span>
-              <span>Packs MIDI plus optional stems inside a single download</span>
+              <span>Spend less time tweaking, more time creating.</span>
             </li>
           </ul>
           <div class="mt-6 flex w-full flex-col gap-3 text-left text-[0.7rem] uppercase tracking-[0.22em] text-slate-300/70 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
@@ -301,7 +317,12 @@
           </div>
         </div>
         <div class="flex w-full items-center justify-center">
-          <div class="hero-orb bg-[radial-gradient(circle_at_32%_30%,rgba(0,209,255,0.32),rgba(8,10,18,0.4)60%),radial-gradient(circle_at_70%_68%,rgba(255,110,255,0.28),rgba(6,10,30,0.5)75%)]"></div>
+          <!-- breathing orb -->
+          <div class="hero-orb">
+            <div class="orb-layer orb-outer"></div>
+            <div class="orb-layer orb-middle"></div>
+            <div class="orb-layer orb-inner"></div>
+          </div>
         </div>
       </div>
     </section>
