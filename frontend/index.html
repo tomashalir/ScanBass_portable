@@ -377,6 +377,12 @@
             <button data-variant="full" class="variant-btn">Full melody MIDI</button>
           </div>
           <div id="midiDownload" class="text-sm text-cyan-200"></div>
+          <div id="analysisPanel" class="mt-3 grid grid-cols-1 gap-3 rounded-2xl border border-white/5 bg-white/5/50 p-3 text-[0.8rem] text-slate-200/85 hidden">
+            <div class="flex flex-col gap-1">
+              <span class="text-[0.7rem] uppercase tracking-[0.24em] text-slate-300/70">Key</span>
+              <span id="keyValue" class="text-lg font-semibold text-cyan-100">—</span>
+            </div>
+          </div>
           <ul id="artifactList" class="artifact-list hidden" aria-live="polite"></ul>
         </div>
       </section>
@@ -443,6 +449,8 @@
   const artifactList = document.getElementById("artifactList");
   const downloadHint = document.getElementById("downloadHint");
   const variantSwitcher = document.getElementById("variantSwitcher");
+  const analysisPanel = document.getElementById("analysisPanel");
+  const keyValue = document.getElementById("keyValue");
   let currentDownloadUrl = null;
   let lastUploadedName = null;
   let currentPollAbort = null;
@@ -490,6 +498,12 @@
     artifactList.innerHTML = "";
     artifactList.classList.add("hidden");
     downloadHint?.classList.remove("hidden");
+    if (analysisPanel) {
+      analysisPanel.classList.add("hidden");
+    }
+    if (keyValue) {
+      keyValue.textContent = "—";
+    }
     availableDownloads = {};
     selectedVariant = "bassline";
     variantSwitcher?.querySelectorAll(".variant-btn").forEach(btn => btn.classList.remove("active"));
@@ -530,6 +544,21 @@
       return { key: firstKey, ...availableDownloads[firstKey] };
     }
     return null;
+  }
+
+  function updateAnalysis(metadata) {
+    const hasKey = Boolean(metadata?.key);
+
+    if (!analysisPanel || !keyValue) return;
+
+    if (!hasKey) {
+      analysisPanel.classList.add("hidden");
+      keyValue.textContent = "—";
+      return;
+    }
+
+    keyValue.textContent = metadata.key;
+    analysisPanel.classList.remove("hidden");
   }
 
   function prepareDownloads(job) {
@@ -698,6 +727,7 @@
     setStatus("Packaging outputs…", "⬇️");
 
     prepareDownloads(job);
+    updateAnalysis(job.metadata);
 
     try {
       await downloadSelectedVariant(job.job_id, selectedVariant);
