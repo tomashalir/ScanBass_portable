@@ -301,7 +301,7 @@ def run_basic_pitch_on_wav(wav_path: str) -> bytes:
     Spustí basic-pitch/podobnou inference a vrátí MIDI jako bytes.
     Předpokládáme, že v requirements je basic-pitch.
     """
-    from basic_pitch.inference import predict_and_save
+    from basic_pitch.inference import ICASSP_2022_MODEL_PATH, predict_and_save
 
     out_dir = Path(wav_path).parent
     # basic-pitch uloží .mid vedle
@@ -309,8 +309,10 @@ def run_basic_pitch_on_wav(wav_path: str) -> bytes:
         [wav_path],
         output_directory=str(out_dir),
         save_midi=True,
+        sonify_midi=False,
         save_model_outputs=False,
         save_notes=False,
+        model_or_model_path=ICASSP_2022_MODEL_PATH,
     )
     midi_path = out_dir / "input.mid"
     if not midi_path.exists():
