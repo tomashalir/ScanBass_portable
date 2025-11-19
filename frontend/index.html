@@ -171,6 +171,31 @@
       display: none;
     }
 
+    .variant-btn {
+      border-radius: 999px;
+      border: 1px solid rgba(0, 209, 255, 0.3);
+      background: rgba(255, 255, 255, 0.04);
+      color: #e0f2fe;
+      font-size: 0.78rem;
+      letter-spacing: 0.08em;
+      padding: 0.35rem 0.95rem;
+      text-transform: uppercase;
+      transition: all 0.25s ease;
+    }
+
+    .variant-btn:hover {
+      background: rgba(0, 209, 255, 0.1);
+      transform: translateY(-1px);
+    }
+
+    .variant-btn.active {
+      background: linear-gradient(120deg, rgba(14, 165, 233, 0.35), rgba(236, 72, 153, 0.32));
+      border-color: rgba(236, 72, 153, 0.35);
+      color: #0b1224;
+      font-weight: 700;
+      box-shadow: 0 12px 30px rgba(45, 188, 255, 0.22);
+    }
+
     .badge {
       display: inline-flex;
       align-items: center;
@@ -387,7 +412,21 @@
         <p id="downloadHint" class="text-xs uppercase tracking-[0.24em] text-slate-300/65">Results will unlock here once the transcription completes.</p>
         <div id="downloadCard" class="download-card hidden">
           <h3>MIDI ready</h3>
+          <div class="flex flex-wrap items-center gap-2 pt-1" id="variantSwitcher">
+            <button data-variant="bassline" class="variant-btn active">Bassline MIDI</button>
+            <button data-variant="full" class="variant-btn">Full melody MIDI</button>
+          </div>
           <div id="midiDownload" class="text-sm text-cyan-200"></div>
+          <div id="analysisPanel" class="mt-3 grid grid-cols-2 gap-3 rounded-2xl border border-white/5 bg-white/5/50 p-3 text-[0.8rem] text-slate-200/85 hidden">
+            <div class="flex flex-col gap-1">
+              <span class="text-[0.7rem] uppercase tracking-[0.24em] text-slate-300/70">Tempo</span>
+              <span id="tempoValue" class="text-lg font-semibold text-cyan-100">—</span>
+            </div>
+            <div class="flex flex-col gap-1">
+              <span class="text-[0.7rem] uppercase tracking-[0.24em] text-slate-300/70">Key</span>
+              <span id="keyValue" class="text-lg font-semibold text-cyan-100">—</span>
+            </div>
+          </div>
           <ul id="artifactList" class="artifact-list hidden" aria-live="polite"></ul>
         </div>
       </section>
@@ -409,10 +448,17 @@
   const midiDownload = document.getElementById("midiDownload");
   const artifactList = document.getElementById("artifactList");
   const downloadHint = document.getElementById("downloadHint");
+  const variantSwitcher = document.getElementById("variantSwitcher");
+  const analysisPanel = document.getElementById("analysisPanel");
+  const tempoValue = document.getElementById("tempoValue");
+  const keyValue = document.getElementById("keyValue");
 
   let currentDownloadUrl = null;
   let lastUploadedName = null;
   let currentPollAbort = null;
+  let availableDownloads = {};
+  let selectedVariant = "bassline";
+  let lastJobId = null;
 
   const statusBadge = document.createElement("span");
   statusBadge.className = "badge";
@@ -454,12 +500,22 @@
     artifactList.innerHTML = "";
     artifactList.classList.add("hidden");
     downloadHint?.classList.remove("hidden");
+    availableDownloads = {};
+    selectedVariant = "bassline";
+    variantSwitcher?.querySelectorAll(".variant-btn").forEach(btn => btn.classList.remove("active"));
+    variantSwitcher?.querySelector('[data-variant="bassline"]')?.classList.add("active");
+    if (analysisPanel) {
+      analysisPanel.classList.add("hidden");
+    }
+    if (tempoValue) tempoValue.textContent = "—";
+    if (keyValue) keyValue.textContent = "—";
   }
 
-  function describeDownload(name) {
-    return (name || "").toLowerCase().endsWith(".zip")
-      ? "ZIP includes trimmed clip, isolated bass, and MIDI"
-      : "DAW-ready MIDI";
+  function describeDownload(name, variantKey = "bassline") {
+    if ((name || "").toLowerCase().endsWith(".zip")) {
+      return "ZIP includes trimmed clip, isolated bass, and MIDI";
+    }
+    return variantKey === "full" ? "Full transcription MIDI" : "DAW-ready bassline MIDI";
   }
 
   function renderArtifacts(artifacts) {
@@ -468,23 +524,95 @@
     artifactList.classList.add("hidden");
   }
 
-  function showDownload(blob, downloadName, artifacts) {
+  function setActiveVariantButton(variant) {
+    selectedVariant = variant;
+    variantSwitcher?.querySelectorAll(".variant-btn").forEach(btn => {
+      const isActive = btn.dataset.variant === variant;
+      btn.classList.toggle("active", isActive);
+      btn.ariaPressed = isActive;
+    });
+  }
+
+  function getVariantInfo(preferred) {
+    if (preferred && availableDownloads[preferred]) {
+      return { key: preferred, ...availableDownloads[preferred] };
+    }
+    if (availableDownloads[selectedVariant]) {
+      return { key: selectedVariant, ...availableDownloads[selectedVariant] };
+    }
+    const firstKey = Object.keys(availableDownloads)[0];
+    if (firstKey) {
+      return { key: firstKey, ...availableDownloads[firstKey] };
+    }
+    return null;
+  }
+
+  function updateAnalysis(metadata) {
+    if (!metadata || (!metadata.tempo_bpm && !metadata.key)) {
+      analysisPanel?.classList.add("hidden");
+      return;
+    }
+
+    if (tempoValue && metadata.tempo_bpm) {
+      tempoValue.textContent = `${metadata.tempo_bpm} BPM`;
+    }
+
+    if (keyValue && metadata.key) {
+      keyValue.textContent = metadata.key;
+    }
+
+    analysisPanel?.classList.remove("hidden");
+  }
+
+  function prepareDownloads(job) {
+    availableDownloads = job?.downloads || {};
+    if (!Object.keys(availableDownloads).length && job?.download_url) {
+      availableDownloads = {
+        bassline: { url: job.download_url, name: fallbackDownloadName(job.job_id, lastUploadedName), label: "Bassline MIDI" },
+      };
+    }
+
+    const hasFull = Boolean(availableDownloads.full);
+    setActiveVariantButton(hasFull ? selectedVariant : "bassline");
+    downloadHint?.classList.add("hidden");
+    downloadCard.classList.remove("hidden");
+  }
+
+  function showDownload(blob, downloadName, artifacts, variantKey = selectedVariant) {
     if (currentDownloadUrl) {
       URL.revokeObjectURL(currentDownloadUrl);
     }
     const url = URL.createObjectURL(blob);
     currentDownloadUrl = url;
     const name = downloadName || "scanbass.mid";
+    const label = availableDownloads[variantKey]?.label || (variantKey === "full" ? "Full melody MIDI" : "Bassline MIDI");
     midiDownload.innerHTML = `
       <a class="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-cyan-200 transition hover:bg-white/15"
          href="${url}" download="${name}" draggable="true">
-        ⬇️ Download / drag to DAW
+        ⬇️ Download ${label}
       </a>
-      <span class="block pt-2 text-[0.7rem] text-slate-300/75">${describeDownload(name)}</span>
+      <span class="block pt-2 text-[0.7rem] text-slate-300/75">${describeDownload(name, variantKey)}</span>
     `;
     downloadHint?.classList.add("hidden");
     downloadCard.classList.remove("hidden");
     renderArtifacts(artifacts);
+  }
+
+  async function downloadSelectedVariant(jobId, preferredVariant) {
+    const info = getVariantInfo(preferredVariant);
+    if (!info) {
+      throw new Error("No download available yet");
+    }
+
+    const resp = await fetch(`${API_BASE}${info.url}`);
+    if (!resp.ok) {
+      throw new Error(`Download failed (${resp.status})`);
+    }
+
+    const blob = await resp.blob();
+    const resolvedName = extractFileName(resp, jobId, lastUploadedName) || info.name;
+    showDownload(blob, resolvedName, null, info.key);
+    setStatus(`${info.label || "MIDI"} ready to download.`, "⬇️");
   }
 
   function fallbackDownloadName(jobId, originalName) {
@@ -575,8 +703,8 @@
 
         // 3) hotovo
         if (job.status === "done") {
-          const downloadUrl = job.download_url;
-          await finalizeJob(jobId, downloadUrl);
+          lastJobId = jobId;
+          await finalizeJob(job);
           break;
         }
 
@@ -597,28 +725,15 @@
     }
   }
 
-  async function finalizeJob(jobId, downloadUrlFromJob) {
+  async function finalizeJob(job) {
     showLoader("Packaging bassline and MIDI…");
     setStatus("Packaging outputs…", "⬇️");
 
-    if (!downloadUrlFromJob) {
-      // nemáme download_url – jen to oznam
-      hideLoader();
-      setStatus("Job finished but no download URL was returned.", "ℹ️");
-      processBtn.disabled = false;
-      return;
-    }
+    prepareDownloads(job);
+    updateAnalysis(job.metadata);
 
     try {
-      // nový endpoint: /jobs/{id}/result
-      const resp = await fetch(`${API_BASE}${downloadUrlFromJob}`);
-      if (!resp.ok) {
-        throw new Error(`Download failed (${resp.status})`);
-      }
-      const blob = await resp.blob();
-      const name = extractFileName(resp, jobId, lastUploadedName);
-      showDownload(blob, name, null);
-      setStatus("Bassline MIDI ready to download.", "⬇️");
+      await downloadSelectedVariant(job.job_id, selectedVariant);
     } catch (err) {
       console.error(err);
       setStatus(`Could not download results: ${err.message}`, "!");
@@ -703,6 +818,22 @@
       hideLoader();
       setStatus(`Error: ${err.message}`, "!");
       processBtn.disabled = false;
+    }
+  });
+
+  variantSwitcher?.addEventListener("click", async event => {
+    const btn = event.target.closest("[data-variant]");
+    if (!btn) return;
+    const variant = btn.dataset.variant;
+    if (!availableDownloads[variant]) {
+      return;
+    }
+    setActiveVariantButton(variant);
+    try {
+      await downloadSelectedVariant(lastJobId, variant);
+    } catch (err) {
+      console.error(err);
+      setStatus(`Could not switch download: ${err.message}`, "!");
     }
   });
 
